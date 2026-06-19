@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "advanced-writer": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/advanced-writer/dist/index.js"
+      ]
+    }
+  }
+}
