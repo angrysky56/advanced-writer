@@ -26,6 +26,7 @@ const envSchema = z.object({
   MAX_PANKSEPP_ACTIVATIONS: z.coerce.number().default(2),
   MCP_TRANSPORT: z.enum(['stdio', 'sse']).default('stdio'),
   MCP_PORT: z.coerce.number().default(3100),
+  WORKSPACE_DIR: z.string().default('./data/workspace'),
 });
 
 export const ENV = envSchema.parse(process.env);
