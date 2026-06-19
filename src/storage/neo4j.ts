@@ -16,8 +16,14 @@ export class Neo4jStorage {
     await this.driver.close();
   }
 
+  private getSession() {
+    return this.driver.session({
+      database: ENV.NEO4J_DATABASE || undefined
+    });
+  }
+
   async createCharacterNode(character: CharacterRecord) {
-    const session = this.driver.session();
+    const session = this.getSession();
     try {
       await session.run(
         `
@@ -47,7 +53,7 @@ export class Neo4jStorage {
   }
 
   async createShadowEdge(characterId1: string, characterId2: string) {
-    const session = this.driver.session();
+    const session = this.getSession();
     try {
       await session.run(
         `
