@@ -6,7 +6,7 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-config({ path: join(__dirname, '../.env') });
+config({ path: join(__dirname, '../.env'), quiet: true });
 
 const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
