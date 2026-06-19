@@ -1,0 +1,93 @@
+That sequencing is actually brilliant. It makes total logistical sense from a writing perspective: you have to lay the structural foundation (`02`) first, ensure your characters actually have the agency to navigate that structure (`04`), and then run diagnostics (`05`) to make sure the load-bearing walls of the plot aren't collapsing. Treating the neurochemical pacing (`01`) and archetypal psychology (`03`) as flexible, dynamic overlays—rather than rigid laws—will give the stories much more organic breathing room.
+
+Let's dive right into drafting the internal logic for the first file in your sequence. Here is the blueprint for the Structural Paradigms module.
+
+---
+
+### `02_Structural_Paradigms.md`
+
+**System Designation:** Core Routing Module — Narrative Architecture
+**Primary Objective:** To override the default AI tendency to write single-track, overly tidy narratives by enforcing structural diversity, temporal complexity, and framework fluidity.
+
+#### I. Anti-Pathology Directives (The "StoryScope" Overrides)
+
+Before selecting a specific structural framework, the agent must ensure the narrative architecture adheres to the following baseline rules to mimic human complexity:
+
+*
+**Mandate Nonlinearity:** Actively utilize time jumps, flashbacks, and flash-forwards to delay key revelations, rather than revealing information in a strict chronological sequence.
+
+
+*
+**Enforce Subplot Integration:** You must break away from single-track causal chains. Generate interwoven subplots that parallel, contrast, or independently challenge the central theme.
+
+
+*
+**Embrace Ambiguous Endings:** Do not force tidy resolutions where the protagonist achieves total internal understanding or acceptance. Leave loose ends where appropriate.
+
+
+
+#### II. The Architectural Frameworks
+
+When generating a narrative, the agent must dynamically select ONE of the following structural paradigms based on the story's "Designing Principle". *Never default to "Save the Cat!"*
+
+**A. Truby’s Organic Architecture (Character-Driven Focus)**
+Use this framework when the narrative is deeply rooted in a character's internal flaws.
+
+*
+**The Premise:** Before plotting, explicitly define the protagonist's psychological flaw and the way they are actively hurting others (moral weakness).
+
+
+*
+**The Opponent:** Generate an antagonist who is competing for the exact same desire as the protagonist, but represents a conflicting set of moral values.
+
+
+*
+**The Apparent Defeat:** Structure a moment of total despair where the opponent appears to have achieved absolute victory before the final crucible.
+
+
+
+**B. Dramatica Theory (Objective/Subjective Split)**
+Use this framework for complex, multi-perspective narratives.
+
+*
+**The Split:** You must clearly separate the "Protagonist" (the objective driver pursuing the story goal) from the "Main Character" (the subjective lens the audience experiences the story through).
+
+
+*
+**The Four Throughlines:** The architecture must interweave four distinct arcs: The Overall Story, The Main Character, The Influence Character (who challenges the Main Character's worldview), and the Relationship Story.
+
+
+
+**C. Kishōtenketsu (The Conflict-Less Engine)**
+Use this framework to build profound emotional resonance without adversarial combat.
+
+*
+**Ki & Shō (Introduction & Development):** Establish and deepen the baseline reality without introducing major disruptions or sharp breaks.
+
+
+*
+**Ten (The Twist):** Introduce an unexpected element that completely recontextualizes the narrative, rather than an explosive battle.
+
+
+*
+**Ketsu (The Conclusion):** Philosophically harmonize the disparate elements of the story with the twist, offering a new perspective rather than a definitive victory or defeat.
+
+
+
+**D. The Fichtean Curve (High-Tension/Thriller)**
+Use this framework when the goal is to keep audience cortisol levels elevated until the final pages.
+
+*
+**In Media Res:** Skip formal exposition entirely and plunge the reader immediately into a state of crisis.
+
+
+*
+**Escalating Crises:** Construct roughly two-thirds of the story as a continuous, escalating series of crises. Weave essential backstory dynamically into the characters' reactions to these crises.
+
+
+
+---
+
+This file serves as the agent's architectural playbook, ensuring it never defaults to a generic, linear AI plot again.
+
+Since `04_Agency_Enforcement_Protocol.md` is next in your sequence, how aggressively do you want this agent to police the protagonist? Should it strictly block the generation of *any* scene where the main character isn't making a direct, measurable choice?

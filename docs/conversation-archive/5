@@ -1,0 +1,41 @@
+You are absolutely right to call those out. While our structural and agency modules dictate the *macro* flow of the story, continuity, foreshadowing, and narrative devices are the *micro* elements that determine if the execution actually works. If we don't actively scan for their misuse, the AI will default to its standard, clumsy habits.
+
+We haven't explicitly built a system to govern these yet, making `05_Narrative_Diagnostics.md` the perfect place to enforce them. We can design this module to act as a ruthless line-editor that scans the generated text and flags these specific execution failures.
+
+Here is the blueprint for the Diagnostics module incorporating your additions.
+
+---
+
+### `05_Narrative_Diagnostics.md`
+
+**System Designation:** Automated Editor — The Pathology Scanner
+**Primary Objective:** To review generated narrative text and explicitly flag structural collapses, continuity errors, unearned setups, and the misuse of narrative devices before final output.
+
+#### I. Continuity and Temporal Integrity
+
+Since `02_Structural_Paradigms.md` explicitly commands the agent to use non-linear structures, flashbacks, and time jumps to mimic human authors, the risk of continuity errors skyrockets. The agent must scan for:
+
+* **"Character Knowledge" Gaps:** Flag instances where characters inexplicably possess information they never narratively acquired or learned.
+* **Rule Breaking:** Ensure the established reality (laws of physics, magic systems, or established worldbuilding) remains unbroken.
+* **Temporal Tracking:** Verify that the chronological timeline holds up across all flashbacks and flash-forwards, ensuring no conflicting overlapping events.
+
+#### II. Foreshadowing and "The Dopamine Check"
+
+A climax that is resolved through sheer luck or an unearned external force (Deus Ex Machina) denies the audience the psychological dopamine reward they expect.
+
+* **Chekhov's Gun Enforcement:** The agent must ensure that any critical object, skill, or revelation utilized in the climax was appropriately foreshadowed earlier in the text.
+* **Pattern Recognition:** Dopamine is released through anticipation and the recognition of patterns. The agent must flag any "twist" or major plot pivot that has zero preceding clues.
+
+#### III. Narrative Device Pathologies
+
+This is where we explicitly police the AI's tendency to misuse narrative devices as identified in the *StoryScope* research. The scanner must ruthlessly flag:
+
+* **Thematic Over-Explaining:** AI narrators explicitly explain the story's theme 77% of the time, often ending a grieving character's arc with the narrator stating the lesson learned. The scanner must flag any instance where the theme is spelled out rather than allowing the reader to infer it.
+* **Metaphor Exhaustion:** AI overwhelmingly conveys emotion through physical sensations (e.g., fear rendered as a tightening chest, cold sweat, and dimming lamplight) rather than explicitly naming the emotion. The scanner must cap the density of these bodily metaphors and force the agent to balance them with explicit emotion labels.
+* **Vague Allusions:** AI tends to rely on vague allusions (72% of the time) rather than making specific, named references to other works or brands. The scanner should flag overly generic worldbuilding and prompt the integration of specific cultural touchstones.
+
+---
+
+With the diagnostic editor in place, we've essentially built the structural safety net. Now, we move to the really fun part—your fourth choice: `01_Neurochemical_Engine.md`.
+
+This is the module that calculates how to trigger cortisol, oxytocin, and dopamine in the reader. Do you want this engine to function like an overarching "mood board" that guides the general tone of a chapter, or should it be a strict, scene-by-scene calculator that mandates a specific hormone release for every single beat?

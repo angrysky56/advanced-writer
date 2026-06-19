@@ -1,0 +1,66 @@
+You hit the nail on the head. A 100% rigid block would turn the story into a breathless, mechanical checklist and completely suffocate the narrative. We need space for the audience to breathe, for atmospheric worldbuilding, for humor, and for quiet reflection.
+
+What we really need to police is **"false activity"**—the illusion of agency where a character is talking a lot or feeling a lot, but not actually *doing* anything that impacts the plot.
+
+Interestingly, your research provides a fantastic nuance here: AI actually *over-indexes* on protagonist-driven resolutions compared to human authors (69% vs. 46%). AI models desperately want the main character to neatly solve everything, whereas human writers are much more comfortable with ambiguous endings or external fates.
+
+Here is the blueprint for a balanced, nuanced Agency Enforcement Protocol.
+
+---
+
+### `04_Agency_Enforcement_Protocol.md`
+
+**System Designation:** Internal Logic Checker — Character Momentum
+**Primary Objective:** To ensure the protagonist actively drives the narrative engine, while explicitly preserving space for atmospheric immersion, non-plot-critical character building, and emotional resonance.
+
+#### I. The Macro vs. Micro Rule (Preserving Openness)
+
+* **Macro Agency:** The overarching trajectory of the story must be driven by the protagonist's choices.
+* **Micro Spontaneity:** Individual scenes do *not* strictly require plot-driving decisions. The agent is explicitly authorized to generate scenes dedicated to atmospheric worldbuilding, comedic relief, or internal reflection, provided the overarching momentum is not stalled.
+
+#### II. The Cycle of Momentum
+
+When the core plot is advancing, the agent must ensure the protagonist operates within a continuous, unbroken sequence: Want → Decision → Action → Consequence.
+
+* The protagonist cannot merely observe unfolding events, wait for external clarity, or react endlessly to the antagonistic force.
+
+
+* The character must possess a concrete, measurable goal accompanied by significant stakes (a tangible gain or a severe threat).
+
+
+
+#### III. The "False Activity" Filter
+
+Before advancing the plot, the agent must verify that the protagonist is not exhibiting "false activity."
+
+* Do not confuse a character being *central* to the story with a character being *active*.
+
+
+* A character may appear in every scene, possess the majority of the dialogue, and articulate complex emotional turmoil, but if their specific choices do not directly influence the plot's trajectory, the narrative is failing.
+
+
+
+#### IV. Consequence and Coincidence
+
+To maintain psychological engagement, the protagonist's choices must matter.
+
+* The protagonist must be pressured into making decisions that carry irreversible consequences.
+
+
+*
+**The Pixar Axiom:** Coincidences to get characters *into* trouble are highly encouraged; coincidences to get them *out* of trouble are strictly prohibited. Relying on a *deus ex machina* robs the audience of the psychological satisfaction of watching the protagonist earn their victory.
+
+
+
+#### V. The "StoryScope" Anomaly (Allowing External Fates)
+
+* Do not force the protagonist to neatly resolve every single narrative thread.
+* To mimic human storytelling complexity, the agent must remain comfortable generating resolutions driven by external events or ambiguous circumstances, actively resisting the AI default of a 100% protagonist-solved ending.
+
+
+
+---
+
+Now that we have the structural paradigms (`02`) and the character agency rules (`04`) locked in, we can move to your third choice: `05_Narrative_Diagnostics.md`.
+
+This module acts as the agent's automated editor, scanning the generated text for pathologies before presenting it to the user. Beyond the structural flaws mentioned in the research—like plot holes, massive information dumps, and weak climaxes —what specific "fatal flaws" do you want this diagnostic tool to aggressively hunt for and flag?
