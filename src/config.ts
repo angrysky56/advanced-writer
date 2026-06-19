@@ -1,7 +1,12 @@
 import { config } from 'dotenv';
 import { z } from 'zod';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+config({ path: join(__dirname, '../.env') });
 
 const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
