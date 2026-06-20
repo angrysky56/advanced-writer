@@ -78,15 +78,8 @@ ${executiveSummary}
       await workspaceExporter.saveDraft(story_id, sceneId, rewrittenScene);
     }
 
-    // 4. Recompile the Manuscript
+    // 4. Recompile the Manuscript programmatically to avoid LLM truncation
     const allDrafts = await workspaceExporter.readAllDrafts(story_id);
-    const compilerPrompt = `You are an expert editor. Compile, stitch, and perfectly format the following "Draft 2" scenes into a cohesive final manuscript.\n\n=== DRAFTS ===\n${allDrafts}`;
-
-    const finalManuscript = await aiRouter.generateCompletion({
-      taskType: "generation",
-      systemPrompt: compilerPrompt,
-      userMessage: "Compile the final Draft 2 manuscript.",
-    });
 
     // Save as final_manuscript_v2.md
     const storySlug = story_id.replace(/[^a-z0-9]/gi, "_").toLowerCase();
@@ -96,7 +89,7 @@ ${executiveSummary}
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(
       path.join(dir, "final_manuscript_v2.md"),
-      finalManuscript,
+      allDrafts,
       "utf8",
     );
 

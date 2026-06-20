@@ -87,15 +87,8 @@ Example:
     }
 
     // 3. Compile the Manuscript
-    const allDrafts = await workspaceExporter.readAllDrafts(story_id);
-    const compilerPrompt = `You are an expert editor and formatter. Compile, rewrite, and stitch the following drafted scenes into a polished, cohesive final manuscript formatted as a ${target_length}. Ensure the formatting matches industry standards for a ${target_length}.\n\n=== DRAFTS ===\n${allDrafts}`;
-
-    const finalManuscript = await aiRouter.generateCompletion({
-      taskType: "generation",
-      systemPrompt: compilerPrompt,
-      userMessage: "Compile the final manuscript.",
-    });
-
+    // We simply concatenate them programmatically to avoid LLM token truncation limits
+    const finalManuscript = await workspaceExporter.readAllDrafts(story_id);
     await workspaceExporter.saveManuscript(story_id, finalManuscript);
 
     return {
