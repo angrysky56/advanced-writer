@@ -14,17 +14,17 @@
 
 ## Tools Available in MCP Server
 
-1. create_narrative
+1. `create_narrative`
    Build a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
-2. develop_character
+2. `develop_character`
    Create, update, query, or shadow-match characters in the persistent Archetypal Database.
-3. review_narrative
+3. `review_narrative`
    Run neurochemical scoring, pathology diagnostics, and agency enforcement on existing text. Produces a structured neuro-critique report.
-4. select_structure
+4. `select_structure`
    Interactively select the right structural framework (Truby, Dramatica, Kishōtenketsu, Fichtean) for a story based on its Designing Principle.
-5. rewrite_scene
+5. `rewrite_scene`
    Targeted scene rewriting with before/after neurochemical scoring. Identifies specific pathologies and produces an improved version.
-6. continue_narrative
+6. `continue_narrative`
    Continue drafting a story by generating the next scene based on the previous scene, the story architecture, and user direction.
 
 ---
