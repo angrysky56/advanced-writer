@@ -4,8 +4,8 @@ description: >
   Advanced narrative agent that engineers human-resonant stories using neurochemical pacing,
   Jungian archetypes, structural paradigm selection, and automated pathology diagnostics.
   Use when asked to "write a story", "create a narrative", "develop characters",
-  "review my writing", "critique this scene", "choose a story structure",
-  "rewrite this passage", or any creative fiction task requiring depth beyond generic AI output.
+  "build a world bible", "expand a novel", "batch revise", or run a "storyscope review".
+  Features massive autonomous MCP tools for deep world-building and end-to-end drafting.
 ---
 
 <essential_principles>
@@ -127,6 +127,17 @@ If intent is clear from the user's initial message, skip the intake question and
 **After reading the workflow, follow it exactly. Apply all essential principles throughout.**
 
 </routing>
+
+<automated_mcp_tools>
+
+The advanced-writer MCP server now features autonomous tools to handle massive structural tasks. Trigger these tools when the user requests large-scale automated generation or review:
+
+1. **build_world_bible**: Automatically expands a logline into a massive World Bible (Factions, Tech/Magic, Economics, Geography) and embeds the lore into a Vector DB so every generated scene organically references the world.
+2. **expand_to_novel**: Explodes a brief synopsis into a full scene-by-scene Beat Sheet. If `auto_draft: true` is passed, it executes a massive autonomous background loop, drafting the entire novel chapter-by-chapter and compiling the final manuscript.
+3. **batch_revise_pathologies**: The "Character Writer's Room." It reads failing neuro-critiques, spawns the characters to argue for their agency, generates unified Character Demands, and perfectly rewrites the bad scenes based on those demands.
+4. **storyscope_final_review**: The ultimate academic structural pass. It dispatches 7 parallel AI specialists to analyze a compiled manuscript across 7 StoryScope lenses (Plot, Agents, Perspective, Temporal, Setting, Style, Events), then uses an 8th Synthesizer agent to generate a prioritized Executive Summary To-Do list for Draft 2.
+
+</automated_mcp_tools>
 
 <reference_index>
 
