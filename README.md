@@ -42,6 +42,8 @@
    Expands a brief synopsis into a structured Beat Sheet, and optionally automatically drafts the entire manuscript scene by scene.
 10. `storyscope_final_review`
     Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
+11. `apply_storyscope_revisions`
+    Executes a massive Draft 2 background pass. Reads the StoryScope Executive Summary and systematically rewrites every single drafted scene to aggressively apply the structural To-Do list.
 
 ---
 
