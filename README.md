@@ -29,13 +29,11 @@
 7. `batch_revise_pathologies`
    Scan the diagnostics for a story and for each failing scene, trigger a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
    Executes the following logic loop completely under the hood:
-
-- Grade the Diagnostics: It reads all of the existing neuro-critique reports for a given story and uses an LLM to "grade" them. If a scene has flatlining cortisol, false agency, or other pathologies, it marks it as a "FAIL".
-- The Character Revolt: For each failing scene, it pulls the actual character profiles out of Neo4j and loads the bad scene draft. It then instructs the LLM to roleplay as the characters sitting in a writer's room, fiercely arguing to protect their own agency and archetypes.
-- The Demands: At the end of the argument, the characters output a list of "Unified Character Demands" on how the scene must change.
-- The Rewrite: The editing engine takes the bad draft and strictly applies the Character Demands to rewrite the scene.
-  Recompile: It stitches all the scenes (both untouched and newly rewritten) back together into a fresh final_manuscript.md.
-
+   - Grade the Diagnostics: It reads all of the existing neuro-critique reports for a given story and uses an LLM to "grade" them. If a scene has flatlining cortisol, false agency, or other pathologies, it marks it as a "FAIL".
+   - The Character Revolt: For each failing scene, it pulls the actual character profiles out of Neo4j and loads the bad scene draft. It then instructs the LLM to roleplay as the characters sitting in a writer's room, fiercely arguing to protect their own agency and archetypes.
+   - The Demands: At the end of the argument, the characters output a list of "Unified Character Demands" on how the scene must change.
+   - The Rewrite: The editing engine takes the bad draft and strictly applies the Character Demands to rewrite the scene.
+   - Recompile: It stitches all the scenes (both untouched and newly rewritten) back together into a fresh final_manuscript.md.
 8. `build_world_bible`
    Generates a comprehensive World Bible including lore, history, magic systems, and rules based on the story and its characters.
 9. `expand_to_novel`
