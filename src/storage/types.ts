@@ -1,5 +1,5 @@
-import { JungianArchetype, PankseppSystem } from '../types/character.js';
-import { DiagnosticProfile } from '../types/narrative.js';
+import { JungianArchetype, PankseppSystem } from "../types/character.js";
+import { DiagnosticProfile } from "../types/narrative.js";
 
 export interface CharacterRecord {
   id: string;
@@ -10,7 +10,13 @@ export interface CharacterRecord {
     hamartia: string;
     shadow: string;
     moral_weakness: string;
-    individuation_state: 'Pre-Awareness' | 'Awakening' | 'Confrontation' | 'Integration' | 'Transcendence' | string;
+    individuation_state:
+      | "Pre-Awareness"
+      | "Awakening"
+      | "Confrontation"
+      | "Integration"
+      | "Transcendence"
+      | string;
     role: string;
     panksepp_primary: PankseppSystem | string;
     story_ids: string[];
@@ -27,7 +33,7 @@ export interface StoryRecord {
     genre: string;
     framework: string;
     designing_principle: string;
-    status: 'planning' | 'drafting' | 'review' | 'complete' | string;
+    status: "planning" | "drafting" | "review" | "complete" | string;
     character_ids: string[];
     created_at: string;
     updated_at: string;
@@ -39,14 +45,15 @@ export interface SceneRecord {
   document: string;
   metadata: {
     story_id: string;
-    act: string;
-    sequence: number;
-    cortisol_score: number;
-    oxytocin_score: number;
-    dopamine_score: number;
-    diagnostic_profile: DiagnosticProfile | string;
-    pathologies_detected: string[]; // serialized list of pathology types
-    version: number;
+    scene_id?: string;
+    act?: string;
+    sequence?: number;
+    cortisol_score?: number;
+    oxytocin_score?: number;
+    dopamine_score?: number;
+    diagnostic_profile?: DiagnosticProfile | string;
+    pathologies_detected?: string[]; // serialized list of pathology types
+    version?: number;
     created_at: string;
   };
 }

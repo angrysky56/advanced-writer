@@ -1,6 +1,6 @@
-import neo4j, { Driver } from 'neo4j-driver';
-import { ENV } from '../config.js';
-import { CharacterRecord, StoryRecord, SceneRecord } from './types.js';
+import neo4j, { Driver } from "neo4j-driver";
+import { ENV } from "../config.js";
+import { CharacterRecord, StoryRecord, SceneRecord } from "./types.js";
 
 export class Neo4jStorage {
   private driver: Driver;
@@ -8,7 +8,7 @@ export class Neo4jStorage {
   constructor() {
     this.driver = neo4j.driver(
       ENV.NEO4J_URI,
-      neo4j.auth.basic(ENV.NEO4J_USER, ENV.NEO4J_PASSWORD)
+      neo4j.auth.basic(ENV.NEO4J_USER, ENV.NEO4J_PASSWORD),
     );
   }
 
@@ -18,7 +18,7 @@ export class Neo4jStorage {
 
   private getSession() {
     return this.driver.session({
-      database: ENV.NEO4J_DATABASE || undefined
+      database: ENV.NEO4J_DATABASE || undefined,
     });
   }
 
@@ -44,8 +44,8 @@ export class Neo4jStorage {
           hamartia: character.metadata.hamartia,
           shadow: character.metadata.shadow,
           individuation_state: character.metadata.individuation_state,
-          panksepp_primary: character.metadata.panksepp_primary
-        }
+          panksepp_primary: character.metadata.panksepp_primary,
+        },
       );
     } finally {
       await session.close();
@@ -61,8 +61,29 @@ export class Neo4jStorage {
         MATCH (c2:Character {id: $id2})
         MERGE (c1)-[:SHADOWS]->(c2)
         `,
-        { id1: characterId1, id2: characterId2 }
+        { id1: characterId1, id2: characterId2 },
       );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getCharactersForStory(storyId: string): Promise<any[]> {
+    const session = this.getSession();
+    try {
+      const result = await session.run(
+        `
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids
+        RETURN c
+        `,
+        { storyId },
+      );
+
+      return result.records.map((record) => record.get("c").properties);
+    } catch (e) {
+      console.error("Neo4j retrieve error:", e);
+      return [];
     } finally {
       await session.close();
     }

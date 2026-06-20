@@ -1,6 +1,11 @@
-import { ChromaClient, Collection } from 'chromadb';
-import { ENV } from '../config.js';
-import { CharacterRecord, StoryRecord, SceneRecord, ArchetypeRecord } from './types.js';
+import { ChromaClient, Collection } from "chromadb";
+import { ENV } from "../config.js";
+import {
+  CharacterRecord,
+  StoryRecord,
+  SceneRecord,
+  ArchetypeRecord,
+} from "./types.js";
 
 export class ChromaStorage {
   private client: ChromaClient;
@@ -16,10 +21,14 @@ export class ChromaStorage {
   }
 
   async initialize() {
-    this.characters = await this.client.getOrCreateCollection({ name: 'characters' });
-    this.stories = await this.client.getOrCreateCollection({ name: 'stories' });
-    this.scenes = await this.client.getOrCreateCollection({ name: 'scenes' });
-    this.archetypes = await this.client.getOrCreateCollection({ name: 'archetypes' });
+    this.characters = await this.client.getOrCreateCollection({
+      name: "characters",
+    });
+    this.stories = await this.client.getOrCreateCollection({ name: "stories" });
+    this.scenes = await this.client.getOrCreateCollection({ name: "scenes" });
+    this.archetypes = await this.client.getOrCreateCollection({
+      name: "archetypes",
+    });
   }
 
   async addCharacter(record: CharacterRecord) {
@@ -39,11 +48,31 @@ export class ChromaStorage {
   }
 
   async addScene(record: SceneRecord) {
-    await this.scenes.upsert({
-      ids: [record.id],
-      documents: [record.document],
-      metadatas: [record.metadata as any],
-    });
+    try {
+      await this.scenes.upsert({
+        ids: [record.id],
+        documents: [record.document],
+        metadatas: [record.metadata as any],
+      });
+    } catch (e) {
+      console.error("Chroma upsert error (is server running?):", e);
+    }
+  }
+
+  async searchScenes(query: string, nResults: number = 2): Promise<string[]> {
+    try {
+      const results = await this.scenes.query({
+        queryTexts: [query],
+        nResults,
+      });
+      if (results.documents && results.documents[0]) {
+        return results.documents[0].filter((d) => d !== null) as string[];
+      }
+      return [];
+    } catch (e) {
+      console.error("Chroma search error (is server running?):", e);
+      return [];
+    }
   }
 }
 

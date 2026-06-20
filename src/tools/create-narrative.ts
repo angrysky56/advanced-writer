@@ -1,6 +1,8 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
+import { chromaStorage } from "../storage/chroma.js";
+import { executeContinueNarrative } from "./continue-narrative.js";
 
 export const createNarrativeDef = {
   name: "create_narrative",
@@ -20,7 +22,13 @@ export const createNarrativeDef = {
       },
       target_length: {
         type: "string",
-        enum: ["short_story", "novella", "novel", "screenplay"],
+        enum: [
+          "short_story",
+          "novella",
+          "novel",
+          "screenplay",
+          "book_of_poems",
+        ],
       },
       mode: {
         type: "string",
@@ -95,6 +103,19 @@ export async function executeCreateNarrative(args: any) {
     });
     await workspaceExporter.saveDraft(storyName, "scene_1", draft);
 
+    await chromaStorage
+      .initialize()
+      .catch(() => console.warn("Chroma init failed"));
+    await chromaStorage.addScene({
+      id: `${storyName}_scene_1`,
+      document: draft,
+      metadata: {
+        story_id: storyName,
+        scene_id: "scene_1",
+        created_at: new Date().toISOString(),
+      },
+    });
+
     // 4. Diagnostic
     const diagPrompt = `Analyze the following scene for emotional pacing (cortisol, oxytocin, dopamine).\nScene:\n${draft}`;
     const diagnostic = await aiRouter.generateCompletion({
@@ -108,11 +129,51 @@ export async function executeCreateNarrative(args: any) {
       diagnostic,
     );
 
+    if (args.mode === "fast-auto") {
+      const targetCounts: Record<string, number> = {
+        short_story: 3,
+        book_of_poems: 4,
+        novella: 5,
+        screenplay: 5,
+        novel: 8,
+      };
+      const maxScenes = targetCounts[args.target_length] || 3;
+
+      for (let i = 2; i <= maxScenes; i++) {
+        await executeContinueNarrative({
+          story_id: storyName,
+          previous_scene_id: `scene_${i - 1}`,
+          next_scene_id: `scene_${i}`,
+          user_direction: `Continue drafting scene ${i} of ${maxScenes} for a ${args.target_length}.`,
+        });
+      }
+
+      const allDrafts = await workspaceExporter.readAllDrafts(storyName);
+      const compilerPrompt = `You are an expert editor and formatter. Compile, rewrite, and stitch the following drafted scenes into a polished, cohesive final manuscript formatted as a ${args.target_length}. Ensure the formatting matches industry standards for a ${args.target_length}.\n\n=== DRAFTS ===\n${allDrafts}`;
+
+      const finalManuscript = await aiRouter.generateCompletion({
+        taskType: "generation",
+        systemPrompt: compilerPrompt,
+        userMessage: "Compile the final manuscript.",
+      });
+
+      await workspaceExporter.saveManuscript(storyName, finalManuscript);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `fast-auto workflow complete. Generated ${maxScenes} scenes and compiled final manuscript for ${storyName}.`,
+          },
+        ],
+      };
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: `create_narrative workflow completed successfully. Output saved to workspace under story: ${storyName}`,
+          text: `create_narrative workflow (scene 1) completed successfully. Output saved to workspace under story: ${storyName}`,
         },
       ],
     };
