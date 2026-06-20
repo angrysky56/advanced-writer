@@ -28,6 +28,10 @@ import {
   executeBuildWorldBible,
 } from "./build-world-bible.js";
 import { expandToNovelDef, executeExpandToNovel } from "./expand-to-novel.js";
+import {
+  storyscopeFinalReviewDef,
+  executeStoryscopeFinalReview,
+} from "./storyscope-review.js";
 
 export const ALL_TOOLS = [
   createNarrativeDef,
@@ -39,6 +43,7 @@ export const ALL_TOOLS = [
   batchRevisePathologiesDef,
   buildWorldBibleDef,
   expandToNovelDef,
+  storyscopeFinalReviewDef,
 ];
 
 export async function executeTool(name: string, args: any) {
@@ -61,6 +66,8 @@ export async function executeTool(name: string, args: any) {
       return executeBuildWorldBible(args);
     case "expand_to_novel":
       return executeExpandToNovel(args);
+    case "storyscope_final_review":
+      return executeStoryscopeFinalReview(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

@@ -184,6 +184,49 @@ export class WorkspaceExporter {
       return [];
     }
   }
+
+  async readManuscript(storyName: string): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "manuscript",
+      "final_manuscript.md",
+    );
+    try {
+      return await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      return null;
+    }
+  }
+
+  async saveStoryscopeReport(
+    storyName: string,
+    aspectName: string,
+    content: string,
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const aspectSlug = this.sanitizeFilename(aspectName);
+    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    await this.ensureDir(dir);
+
+    const filePath = path.join(dir, `${aspectSlug}.md`);
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
+
+  async saveStoryscopeExecutiveSummary(
+    storyName: string,
+    content: string,
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    await this.ensureDir(dir);
+
+    const filePath = path.join(dir, "executive-summary.md");
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
 }
 
 export const workspaceExporter = new WorkspaceExporter();
