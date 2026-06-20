@@ -32,6 +32,10 @@ import {
   storyscopeFinalReviewDef,
   executeStoryscopeFinalReview,
 } from "./storyscope-review.js";
+import {
+  applyStoryscopeRevisionsDef,
+  executeApplyStoryscopeRevisions,
+} from "./apply-storyscope-revisions.js";
 
 export const ALL_TOOLS = [
   createNarrativeDef,
@@ -44,6 +48,7 @@ export const ALL_TOOLS = [
   buildWorldBibleDef,
   expandToNovelDef,
   storyscopeFinalReviewDef,
+  applyStoryscopeRevisionsDef,
 ];
 
 export async function executeTool(name: string, args: any) {
@@ -68,6 +73,8 @@ export async function executeTool(name: string, args: any) {
       return executeExpandToNovel(args);
     case "storyscope_final_review":
       return executeStoryscopeFinalReview(args);
+    case "apply_storyscope_revisions":
+      return executeApplyStoryscopeRevisions(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

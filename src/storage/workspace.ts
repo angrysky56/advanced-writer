@@ -129,22 +129,32 @@ export class WorkspaceExporter {
 
   async readAllDrafts(storyName: string): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
-    const draftsDir = path.join(this.baseDir, storySlug, "drafts");
-
+    const dir = path.join(this.baseDir, storySlug, "drafts");
     try {
-      const files = await fs.promises.readdir(draftsDir);
-      const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
-      let combined = "";
-      for (const file of mdFiles) {
+      const files = await fs.promises.readdir(dir);
+      const markdownFiles = files.filter((f) => f.endsWith(".md")).sort();
+      let compiled = "";
+      for (const file of markdownFiles) {
         const content = await fs.promises.readFile(
-          path.join(draftsDir, file),
+          path.join(dir, file),
           "utf8",
         );
-        combined += `\n\n=== ${file} ===\n\n${content}`;
+        compiled += `\n\n${content}`;
       }
-      return combined;
+      return compiled;
     } catch {
       return "";
+    }
+  }
+
+  async listDrafts(storyName: string): Promise<string[]> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "drafts");
+    try {
+      const files = await fs.promises.readdir(dir);
+      return files.filter((f) => f.endsWith(".md")).sort();
+    } catch {
+      return [];
     }
   }
 
@@ -226,6 +236,23 @@ export class WorkspaceExporter {
     const filePath = path.join(dir, "executive-summary.md");
     await fs.promises.writeFile(filePath, content, "utf8");
     return filePath;
+  }
+
+  async readStoryscopeExecutiveSummary(
+    storyName: string,
+  ): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "storyscope-reports",
+      "executive-summary.md",
+    );
+    try {
+      return await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      return null;
+    }
   }
 }
 
