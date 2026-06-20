@@ -69,10 +69,22 @@ export async function executeContinueNarrative(args: any) {
         ? semanticScenes.join("\\n\\n---\\n\\n")
         : "No relevant past scenes found in Vector DB.";
 
+    const semanticLore = await chromaStorage.searchLore(
+      user_direction || "next scene",
+      3,
+    );
+    const worldLoreContext =
+      semanticLore.length > 0
+        ? semanticLore.join("\\n\\n---\\n\\n")
+        : "No relevant world lore found.";
+
     const systemPrompt = `You are a masterful storyteller. Your task is to write the NEXT scene in this story.
 
 === ARCHITECTURE BRIEF ===
 ${architecture}
+
+=== WORLD BIBLE LORE ===
+${worldLoreContext}
 
 === GRAPH DB CHARACTER PROFILES ===
 ${characterContext}

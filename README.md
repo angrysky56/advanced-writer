@@ -26,6 +26,20 @@
    Targeted scene rewriting with before/after neurochemical scoring. Identifies specific pathologies and produces an improved version.
 6. `continue_narrative`
    Continue drafting a story by generating the next scene based on the previous scene, the story architecture, and user direction.
+7. `batch_revise_pathologies`
+   Scan the diagnostics for a story and for each failing scene, trigger a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
+   Executes the following logic loop completely under the hood:
+
+- Grade the Diagnostics: It reads all of the existing neuro-critique reports for a given story and uses an LLM to "grade" them. If a scene has flatlining cortisol, false agency, or other pathologies, it marks it as a "FAIL".
+- The Character Revolt: For each failing scene, it pulls the actual character profiles out of Neo4j and loads the bad scene draft. It then instructs the LLM to roleplay as the characters sitting in a writer's room, fiercely arguing to protect their own agency and archetypes.
+- The Demands: At the end of the argument, the characters output a list of "Unified Character Demands" on how the scene must change.
+- The Rewrite: The editing engine takes the bad draft and strictly applies the Character Demands to rewrite the scene.
+  Recompile: It stitches all the scenes (both untouched and newly rewritten) back together into a fresh final_manuscript.md.
+
+8. `build_world_bible`
+   Generates a comprehensive World Bible including lore, history, magic systems, and rules based on the story and its characters.
+9. `expand_to_novel`
+   Expands a brief synopsis into a structured Beat Sheet, and optionally automatically drafts the entire manuscript scene by scene.
 
 ---
 
@@ -64,6 +78,24 @@ Users can switch modes at any point during any workflow:
 - **Fast-Auto** — Agent generates autonomously from whatever context it has
 
 ---
+
+## Quick start
+
+Requires Neo4j Desktop started with database and Graph Data Science Library installed, Node and NPM, OpenRouter API key and/or Ollama server running.
+
+Run `npm audit` before running `npm run build` to check for security vulnerabilities.
+
+```bash
+cd advanced-writer
+npm audit
+npm run build
+```
+
+Copy the .env.example file to .env and fill in the required and desired values.
+
+Add the mcp server to your client with your builds path to dist/index.js
+
+[mcp server configuration example](mcp_config.json.example)
 
 ## Current File Structure
 

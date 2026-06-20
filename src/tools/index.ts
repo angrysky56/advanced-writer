@@ -19,6 +19,15 @@ import {
   continueNarrativeDef,
   executeContinueNarrative,
 } from "./continue-narrative.js";
+import {
+  batchRevisePathologiesDef,
+  executeBatchRevisePathologies,
+} from "./batch-revise-pathologies.js";
+import {
+  buildWorldBibleDef,
+  executeBuildWorldBible,
+} from "./build-world-bible.js";
+import { expandToNovelDef, executeExpandToNovel } from "./expand-to-novel.js";
 
 export const ALL_TOOLS = [
   createNarrativeDef,
@@ -27,6 +36,9 @@ export const ALL_TOOLS = [
   selectStructureDef,
   rewriteSceneDef,
   continueNarrativeDef,
+  batchRevisePathologiesDef,
+  buildWorldBibleDef,
+  expandToNovelDef,
 ];
 
 export async function executeTool(name: string, args: any) {
@@ -43,6 +55,12 @@ export async function executeTool(name: string, args: any) {
       return executeRewriteScene(args);
     case "continue_narrative":
       return executeContinueNarrative(args);
+    case "batch_revise_pathologies":
+      return executeBatchRevisePathologies(args);
+    case "build_world_bible":
+      return executeBuildWorldBible(args);
+    case "expand_to_novel":
+      return executeExpandToNovel(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

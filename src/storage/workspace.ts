@@ -47,6 +47,26 @@ export class WorkspaceExporter {
     return filePath;
   }
 
+  async saveWorldBible(storyName: string, content: string): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "structure");
+    await this.ensureDir(dir);
+
+    const filePath = path.join(dir, "world-bible.md");
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
+
+  async saveBeatSheet(storyName: string, content: string): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "structure");
+    await this.ensureDir(dir);
+
+    const filePath = path.join(dir, "beat-sheet.md");
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
+
   async saveDiagnosticReport(
     storyName: string,
     sceneId: string,
@@ -136,6 +156,33 @@ export class WorkspaceExporter {
     const filePath = path.join(dir, "final_manuscript.md");
     await fs.promises.writeFile(filePath, content, "utf8");
     return filePath;
+  }
+
+  async readAllDiagnostics(
+    storyName: string,
+  ): Promise<{ sceneId: string; content: string }[]> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const diagnosticsDir = path.join(this.baseDir, storySlug, "diagnostics");
+
+    try {
+      const files = await fs.promises.readdir(diagnosticsDir);
+      const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
+      const results = [];
+      for (const file of mdFiles) {
+        const content = await fs.promises.readFile(
+          path.join(diagnosticsDir, file),
+          "utf8",
+        );
+        // Extract sceneSlug from filename (e.g., neuro-critique-scene_1.md)
+        const match = file.match(/neuro-critique-(.*)\.md/);
+        if (match) {
+          results.push({ sceneId: match[1], content });
+        }
+      }
+      return results;
+    } catch {
+      return [];
+    }
   }
 }
 

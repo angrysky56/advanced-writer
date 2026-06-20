@@ -13,6 +13,7 @@ export class ChromaStorage {
   public stories!: Collection;
   public scenes!: Collection;
   public archetypes!: Collection;
+  public lore!: Collection;
 
   constructor() {
     // Note: The JS chromadb client typically connects to a running Chroma server
@@ -28,6 +29,9 @@ export class ChromaStorage {
     this.scenes = await this.client.getOrCreateCollection({ name: "scenes" });
     this.archetypes = await this.client.getOrCreateCollection({
       name: "archetypes",
+    });
+    this.lore = await this.client.getOrCreateCollection({
+      name: "lore",
     });
   }
 
@@ -71,6 +75,34 @@ export class ChromaStorage {
       return [];
     } catch (e) {
       console.error("Chroma search error (is server running?):", e);
+      return [];
+    }
+  }
+
+  async addLore(id: string, story_id: string, document: string) {
+    try {
+      await this.lore.upsert({
+        ids: [id],
+        documents: [document],
+        metadatas: [{ story_id, created_at: new Date().toISOString() }],
+      });
+    } catch (e) {
+      console.error("Chroma upsert lore error:", e);
+    }
+  }
+
+  async searchLore(query: string, nResults: number = 3): Promise<string[]> {
+    try {
+      const results = await this.lore.query({
+        queryTexts: [query],
+        nResults,
+      });
+      if (results.documents && results.documents[0]) {
+        return results.documents[0].filter((d: any) => d !== null) as string[];
+      }
+      return [];
+    } catch (e) {
+      console.error("Chroma search lore error:", e);
       return [];
     }
   }
