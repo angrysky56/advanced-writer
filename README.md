@@ -2,17 +2,30 @@
 
 > A modular narrative engineering system that uses neurochemical pacing, Jungian depth psychology, structural paradigm selection, and automated pathology diagnostics to produce fiction that resists the default failure modes of AI-generated prose.
 
-## Status
+## Current Implementation
 
-| Layer | Status | Description |
-|-------|--------|-------------|
-| **Skill Prompts** | ✅ Complete | Anthropic Skill 2.0 router pattern — 8 references, 5 workflows, 3 templates |
-| **MCP Server** | 🔲 Not started | TypeScript MCP server exposing workflows as tools |
-| **Storage** | 🔲 Not started | ChromaDB (vectors) + Neo4j (graph) for persistent characters/stories |
-| **AI Routing** | 🔲 Not started | OpenRouter (cloud) + Ollama (local) with per-task model selection |
-| **Configuration** | 🔲 Not started | `.env` for API keys, model choices, scoring thresholds |
+| Layer             | Description                                                                 |
+| ----------------- | --------------------------------------------------------------------------- |
+| **Skill Prompts** | Anthropic Skill 2.0 router pattern — 8 references, 5 workflows, 3 templates |
+| **MCP Server**    | TypeScript MCP server exposing workflows as tools                           |
+| **Storage**       | ChromaDB (vectors) + Neo4j (graph) for persistent characters/stories        |
+| **AI Routing**    | OpenRouter (cloud) + Ollama (local) with per-task model selection           |
+| **Configuration** | `.env` for API keys, model choices, scoring thresholds                      |
 
-See [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) for the full implementation brief.
+## Tools Available in MCP Server
+
+1. create_narrative
+   Build a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
+2. develop_character
+   Create, update, query, or shadow-match characters in the persistent Archetypal Database.
+3. review_narrative
+   Run neurochemical scoring, pathology diagnostics, and agency enforcement on existing text. Produces a structured neuro-critique report.
+4. select_structure
+   Interactively select the right structural framework (Truby, Dramatica, Kishōtenketsu, Fichtean) for a story based on its Designing Principle.
+5. rewrite_scene
+   Targeted scene rewriting with before/after neurochemical scoring. Identifies specific pathologies and produces an improved version.
+6. continue_narrative
+   Continue drafting a story by generating the next scene based on the previous scene, the story architecture, and user direction.
 
 ---
 
@@ -33,14 +46,14 @@ The Advanced Writer is not a chatbot wrapper. It is a **multi-module narrative e
 
 ### The Six Modules
 
-| # | Module | Function |
-|---|--------|----------|
-| 00 | Master Core Directives | Entropy Mandate — reject obvious resolutions, earn catharsis, resist moralizing |
-| 01 | Neurochemical Engine | Score scenes 1–10 on Cortisol/Oxytocin/Dopamine; diagnose pacing flatlines |
-| 02 | Structural Paradigms | Select and enforce narrative architecture (Truby/Dramatica/Kishōtenketsu/Fichtean) |
-| 03 | Archetypal Database | Persistent character library with Jungian anchors + Tri-Layer Emotional Substrate |
-| 04 | Agency Enforcement | Verify Want→Decision→Action→Consequence; filter false activity |
-| 05 | Narrative Diagnostics | Scan for continuity errors, Chekhov's Gun violations, StoryScope anti-patterns |
+| #   | Module                 | Function                                                                           |
+| --- | ---------------------- | ---------------------------------------------------------------------------------- |
+| 00  | Master Core Directives | Entropy Mandate — reject obvious resolutions, earn catharsis, resist moralizing    |
+| 01  | Neurochemical Engine   | Score scenes 1–10 on Cortisol/Oxytocin/Dopamine; diagnose pacing flatlines         |
+| 02  | Structural Paradigms   | Select and enforce narrative architecture (Truby/Dramatica/Kishōtenketsu/Fichtean) |
+| 03  | Archetypal Database    | Persistent character library with Jungian anchors + Tri-Layer Emotional Substrate  |
+| 04  | Agency Enforcement     | Verify Want→Decision→Action→Consequence; filter false activity                     |
+| 05  | Narrative Diagnostics  | Scan for continuity errors, Chekhov's Gun violations, StoryScope anti-patterns     |
 
 ### Three Interaction Modes
 
@@ -93,7 +106,7 @@ The system is built on a multidisciplinary research report covering:
 
 - Evolutionary psychology of narrative (stories as survival simulators)
 - Neurochemical architecture of transportation (Zak et al.)
-- Aristotelian dramatic theory (*Poetics* — Mythos, Ethos, Dianoia, Catharsis)
+- Aristotelian dramatic theory (_Poetics_ — Mythos, Ethos, Dianoia, Catharsis)
 - Jungian archetypes and the collective unconscious
 - Panksepp's affective neuroscience (7 primary affect systems)
 - Plutchik's psychoevolutionary emotion taxonomy
