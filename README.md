@@ -40,6 +40,8 @@
    Generates a comprehensive World Bible including lore, history, magic systems, and rules based on the story and its characters.
 9. `expand_to_novel`
    Expands a brief synopsis into a structured Beat Sheet, and optionally automatically drafts the entire manuscript scene by scene.
+10. `storyscope_final_review`
+    Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
 
 ---
 
@@ -49,7 +51,7 @@
 
 The Advanced Writer is not a chatbot wrapper. It is a **multi-module narrative engineering pipeline** grounded in:
 
-- **StoryScope Research** — Empirical data showing AI defaults to moralizing endings (77%), protagonist-solved plots (69%), bodily metaphors, and single-track timelines. Every module actively counteracts these measured pathologies.
+- **StoryScope Research and Prompts** — Empirical data showing AI defaults to moralizing endings (77%), protagonist-solved plots (69%), bodily metaphors, and single-track timelines. Every module actively counteracts these measured pathologies.
   - [arXiv](https://arxiv.org/abs/2604.03136) : StoryScope: Investigating idiosyncrasies in AI fiction
 
 - **Affective Neuroscience** — Scenes are scored on three biological axes (Cortisol/Oxytocin/Dopamine) with diagnostic profiles that trigger targeted rewrites.
