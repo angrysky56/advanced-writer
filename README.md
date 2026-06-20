@@ -151,4 +151,4 @@ The system is built on a multidisciplinary research report covering:
 
 ## License
 
-TBD
+[GPLv3](LICENSE)
