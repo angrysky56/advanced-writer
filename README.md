@@ -45,6 +45,8 @@
 
 ## What This System Does
 
+[Examples in Wiki](https://github.com/angrysky56/advanced-writer/wiki)
+
 The Advanced Writer is not a chatbot wrapper. It is a **multi-module narrative engineering pipeline** grounded in:
 
 - **StoryScope Research** — Empirical data showing AI defaults to moralizing endings (77%), protagonist-solved plots (69%), bodily metaphors, and single-track timelines. Every module actively counteracts these measured pathologies.
