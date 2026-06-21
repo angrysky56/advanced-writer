@@ -8,6 +8,7 @@
 | ----------------- | --------------------------------------------------------------------------- |
 | **Skill Prompts** | Anthropic Skill 2.0 router pattern — 8 references, 5 workflows, 3 templates |
 | **MCP Server**    | TypeScript MCP server exposing workflows as tools                           |
+| **Web UI**        | Next.js chat interface for real-time interaction and tool-calling           |
 | **Storage**       | ChromaDB (vectors) + Neo4j (graph) for persistent characters/stories        |
 | **AI Routing**    | OpenRouter (cloud) + Ollama (local) with per-task model selection           |
 | **Configuration** | `.env` for API keys, model choices, scoring thresholds                      |
@@ -42,6 +43,36 @@
     Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
 11. `apply_storyscope_revisions`
     Executes a massive Draft 2 background pass. Reads the StoryScope Executive Summary and systematically rewrites every single drafted scene to aggressively apply the structural To-Do list.
+
+---
+
+## Web UI
+
+The system includes a premium Next.js Web UI for direct, interactive pair-programming/writing with the Copilot. It features:
+
+- **Real-time Streaming Chat**: Prompt the AI and see the output stream word-by-word.
+- **Step-by-step Tool Execution**: Displays live status indicators as the agent executes tools (e.g. `expand_to_novel`, `storyscope_final_review`).
+- **Reasoning Display**: Renders any reasoning/thinking steps taken by the AI in a distinct styled block.
+- **Local Execution**: Runs alongside the MCP server.
+
+### Running the Web UI
+
+1.  Make sure dependencies are installed and the project is built:
+    ```bash
+    npm install
+    npm run build
+    ```
+2.  Start the Next.js development server:
+    ```bash
+    npm run dev:ui
+    ```
+3.  Open `http://localhost:3000` in your browser.
+
+### Key Components
+
+- [app/page.tsx](file:///home/ty/Repositories/ai_workspace/advanced-writer/app/page.tsx): Client-side chat page implementing input handling, state management, and message parts rendering.
+- [app/api/chat/route.ts](file:///home/ty/Repositories/ai_workspace/advanced-writer/app/api/chat/route.ts): Server-side API route orchestrating model streaming and tool invocation handler functions.
+- [app/globals.css](file:///home/ty/Repositories/ai_workspace/advanced-writer/app/globals.css): CSS styles for the chat layouts and indicators.
 
 ---
 
@@ -109,9 +140,16 @@ advanced-writer/
 ├── LICENSE                           # License file
 ├── package.json                      # Node project configuration
 ├── package-lock.json                 # Lockfile for dependencies
-├── tsconfig.json                     # TypeScript configuration
+├── tsconfig.json                     # TypeScript configuration (Next.js app/src)
+├── tsconfig.mcp.json                 # TypeScript configuration (MCP server build)
+├── next.config.js                    # Next.js configuration (Webpack resolution)
 ├── test_workspace.ts                 # Test script for workspace/Neo4j setup
 ├── mcp_config.json.example           # Example configuration for MCP client
+├── app/                              # Next.js Web UI
+│   ├── page.tsx                      # Client chat page
+│   ├── layout.tsx                    # Root HTML layout
+│   ├── globals.css                   # Global styling
+│   └── api/chat/route.ts             # API route for streaming & tool executions
 ├── skill/                            # Narrative engineering core rules and guidelines
 │   ├── SKILL.md                      # Router — essential principles + intake routing
 │   ├── workflows/                    # Step-by-step procedures
