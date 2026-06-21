@@ -86,10 +86,11 @@ export class WorkspaceExporter {
     storyName: string,
     sceneId: string,
     content: string,
+    version: string = "v1",
   ): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
     const sceneSlug = this.sanitizeFilename(sceneId);
-    const dir = path.join(this.baseDir, storySlug, "drafts");
+    const dir = path.join(this.baseDir, storySlug, "drafts", version);
     await this.ensureDir(dir);
 
     const filePath = path.join(dir, `${sceneSlug}.md`);
@@ -111,13 +112,18 @@ export class WorkspaceExporter {
     }
   }
 
-  async readDraft(storyName: string, sceneId: string): Promise<string | null> {
+  async readDraft(
+    storyName: string,
+    sceneId: string,
+    version: string = "v1",
+  ): Promise<string | null> {
     const storySlug = this.sanitizeFilename(storyName);
     const sceneSlug = this.sanitizeFilename(sceneId);
     const filePath = path.join(
       this.baseDir,
       storySlug,
       "drafts",
+      version,
       `${sceneSlug}.md`,
     );
     try {
@@ -127,9 +133,12 @@ export class WorkspaceExporter {
     }
   }
 
-  async readAllDrafts(storyName: string): Promise<string> {
+  async readAllDrafts(
+    storyName: string,
+    version: string = "v1",
+  ): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
-    const dir = path.join(this.baseDir, storySlug, "drafts");
+    const dir = path.join(this.baseDir, storySlug, "drafts", version);
     try {
       const files = await fs.promises.readdir(dir);
       const markdownFiles = files.filter((f) => f.endsWith(".md")).sort();
@@ -147,9 +156,12 @@ export class WorkspaceExporter {
     }
   }
 
-  async listDrafts(storyName: string): Promise<string[]> {
+  async listDrafts(
+    storyName: string,
+    version: string = "v1",
+  ): Promise<string[]> {
     const storySlug = this.sanitizeFilename(storyName);
-    const dir = path.join(this.baseDir, storySlug, "drafts");
+    const dir = path.join(this.baseDir, storySlug, "drafts", version);
     try {
       const files = await fs.promises.readdir(dir);
       return files.filter((f) => f.endsWith(".md")).sort();
@@ -158,9 +170,13 @@ export class WorkspaceExporter {
     }
   }
 
-  async saveManuscript(storyName: string, content: string): Promise<string> {
+  async saveManuscript(
+    storyName: string,
+    content: string,
+    version: string = "v1",
+  ): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
-    const dir = path.join(this.baseDir, storySlug, "manuscript");
+    const dir = path.join(this.baseDir, storySlug, "manuscript", version);
     await this.ensureDir(dir);
 
     const filePath = path.join(dir, "final_manuscript.md");
@@ -195,12 +211,16 @@ export class WorkspaceExporter {
     }
   }
 
-  async readManuscript(storyName: string): Promise<string | null> {
+  async readManuscript(
+    storyName: string,
+    version: string = "v1",
+  ): Promise<string | null> {
     const storySlug = this.sanitizeFilename(storyName);
     const filePath = path.join(
       this.baseDir,
       storySlug,
       "manuscript",
+      version,
       "final_manuscript.md",
     );
     try {

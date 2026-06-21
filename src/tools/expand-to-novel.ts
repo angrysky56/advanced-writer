@@ -25,13 +25,24 @@ export const expandToNovelDef = {
           "If true, it will loop through the generated beat sheet and draft EVERY scene consecutively. WARNING: Can take an hour+ for a novel.",
         default: false,
       },
+      version: {
+        type: "string",
+        description: "The version tag for the draft (e.g., 'v2')",
+        default: "v1",
+      },
     },
     required: ["story_id", "synopsis", "target_length"],
   },
 };
 
 export async function executeExpandToNovel(args: any) {
-  const { story_id, synopsis, target_length, auto_draft = false } = args;
+  const {
+    story_id,
+    synopsis,
+    target_length,
+    auto_draft = false,
+    version = "v1",
+  } = args;
 
   try {
     // 1. Explode Synopsis into Beat Sheet
@@ -83,13 +94,17 @@ Example:
         previous_scene_id: i === 1 ? "none" : `scene_${i - 1}`,
         next_scene_id: `scene_${i}`,
         user_direction: `Follow this beat perfectly: ${beatDescription}`,
+        version: version,
       });
     }
 
     // 3. Compile the Manuscript
     // We simply concatenate them programmatically to avoid LLM token truncation limits
-    const finalManuscript = await workspaceExporter.readAllDrafts(story_id);
-    await workspaceExporter.saveManuscript(story_id, finalManuscript);
+    const finalManuscript = await workspaceExporter.readAllDrafts(
+      story_id,
+      version,
+    );
+    await workspaceExporter.saveManuscript(story_id, finalManuscript, version);
 
     return {
       content: [

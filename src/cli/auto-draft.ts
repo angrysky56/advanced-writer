@@ -18,16 +18,40 @@ async function main() {
   }
 
   console.log(`Starting Auto-Draft Sequence for story: ${storyId}`);
-  
+
   const workspaceDir = process.env.WORKSPACE_DIR || "./data/workspace";
   const storySlug = storyId.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-  const architecturePath = path.join(workspaceDir, storySlug, "structure", "story-architecture-brief.md");
-  
+
+  // Determine next version
+  let nextVersion = "v1";
+  const draftsDir = path.join(workspaceDir, storySlug, "drafts");
+  if (fs.existsSync(draftsDir)) {
+    const dirs = fs
+      .readdirSync(draftsDir, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory() && dirent.name.startsWith("v"))
+      .map((dirent) => parseInt(dirent.name.substring(1)))
+      .filter((num) => !isNaN(num))
+      .sort((a, b) => b - a);
+    if (dirs.length > 0) {
+      nextVersion = `v${dirs[0] + 1}`;
+    }
+  }
+  console.log(`Determined Next Draft Version: ${nextVersion}`);
+
+  const architecturePath = path.join(
+    workspaceDir,
+    storySlug,
+    "structure",
+    "story-architecture-brief.md",
+  );
+
   let synopsis = "";
   try {
     synopsis = fs.readFileSync(architecturePath, "utf8");
   } catch (e) {
-    console.error(`Error: Could not find architecture brief at ${architecturePath}`);
+    console.error(
+      `Error: Could not find architecture brief at ${architecturePath}`,
+    );
     process.exit(1);
   }
 
@@ -36,9 +60,12 @@ async function main() {
       story_id: storyId,
       synopsis: synopsis,
       target_length: targetLength,
-      auto_draft: true
+      auto_draft: true,
+      version: nextVersion,
     });
-    console.log("Auto-Draft Sequence Completed Successfully!");
+    console.log(
+      `Auto-Draft Sequence Completed Successfully for ${nextVersion}!`,
+    );
     console.log(JSON.stringify(result, null, 2));
   } catch (err) {
     console.error("Auto-Draft Sequence Failed:", err);

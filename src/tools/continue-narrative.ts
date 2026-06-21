@@ -39,6 +39,7 @@ export async function executeContinueNarrative(args: any) {
     previous_scene_id,
     next_scene_id,
     user_direction = "",
+    version = "v1",
   } = args;
 
   try {
@@ -46,8 +47,11 @@ export async function executeContinueNarrative(args: any) {
       (await workspaceExporter.readArchitectureBrief(story_id)) ||
       "Architecture brief not found.";
     const previousScene =
-      (await workspaceExporter.readDraft(story_id, previous_scene_id)) ||
-      "Previous scene not found.";
+      (await workspaceExporter.readDraft(
+        story_id,
+        previous_scene_id,
+        version,
+      )) || "Previous scene not found.";
 
     // Initialize Chroma client if needed (it handles getOrCreate inside)
     await chromaStorage
@@ -96,7 +100,8 @@ ${previousScene}
 === USER DIRECTION / FEEDBACK ===
 ${user_direction || "Continue the narrative naturally, maintaining the tone, character voices, and momentum."}
 
-Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.`;
+Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.
+CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for AI dialogue or output. If CodeWhisper communicates in code, integrate it naturally into the prose (e.g., using italics or standard quotes). The final output must read like a traditional novel, not a GitHub README.`;
 
     const newDraft = await aiRouter.generateCompletion({
       taskType: "generation",
@@ -104,7 +109,12 @@ Maintain the established prose style. Do not summarize the previous scene; pick 
       userMessage: `Write the new scene (${next_scene_id}).`,
     });
 
-    await workspaceExporter.saveDraft(story_id, next_scene_id, newDraft);
+    await workspaceExporter.saveDraft(
+      story_id,
+      next_scene_id,
+      newDraft,
+      version,
+    );
 
     // Save the new draft to Chroma so it can be searched next time
     await chromaStorage.addScene({
