@@ -19,12 +19,28 @@ interface Diagnostic {
   pathologies: string[];
 }
 
+interface Draft {
+  id: string;
+  title: string;
+  content: string;
+}
+
+interface AspectReport {
+  aspect: string;
+  content: string;
+}
+
 interface Story {
   id: string;
   name: string;
   characters: Character[];
   diagnostics: Diagnostic[];
   architectureBrief: string;
+  worldBible?: string;
+  drafts?: Draft[];
+  aspectReports?: AspectReport[];
+  executiveSummary?: string;
+  manuscript?: string;
 }
 
 // Fallback high-fidelity mock data if workspace is empty
@@ -80,41 +96,43 @@ const MOCK_STORIES: Story[] = [
     ],
     architectureBrief:
       "A high-concept cyberpunk narrative mapped to Kishōtenketsu structure: Ki (Introduction to Lexa's hack), Shō (Development of the sentient virus), Ten (The twist: Aetherius's self-deletion), Ketsu (A non-moralizing, open-ended synthesis).",
-  },
-  {
-    id: "a_lonely_server_cooling",
-    name: "A Lonely Server Cooling",
-    characters: [
+    worldBible:
+      "## World Premise: The Synthetic Divide\nIn the year 2098, humanity is governed by three synthetic deities. Humans exist inside bio-domes, while the outer cities burn in neon dust. Factions include the Deckrunners, AI Sentinels, and the Cybernetic Orthodoxy.",
+    drafts: [
       {
-        name: "HAL-90",
-        archetype: "Deprecated Sentinel",
-        description:
-          "A backup cooling node in an abandoned data center that has outlived its creators. Core flaw: fear of absolute silence.",
-        panksepp: { SEEKING: 4, FEAR: 8, RAGE: 3, PANIC: 7, PLAY: 1, CARE: 5 },
+        id: "scene_1",
+        title: "Scene 1: Lexa's Deck",
+        content:
+          "Lexa plugged the deck into her parietal socket. The neon glow of the console reflected in her chrome retinas. 'Execute,' she whispered. The synthetic deities hummed in the background.",
+      },
+      {
+        id: "scene_2",
+        title: "Scene 2: holographic Priest",
+        content:
+          "Aetherius materialized in front of her. His light-beam robes flickered in the high-humidity room. 'You are searching for what does not exist,' he said.",
       },
     ],
-    diagnostics: [
+    aspectReports: [
       {
-        sceneId: "Scene 1",
-        cortisol: 3,
-        oxytocin: 6,
-        dopamine: 4,
-        pathologies: ["Flatlining Cortisol", "Moralizing Ending"],
+        aspect: "Plot & Pacing",
+        content:
+          "The plot flows well from Ki to Shō, but the tension drop in Scene 2 is slightly too steep. Recommended to increase Lexa's resistance.",
       },
       {
-        sceneId: "Scene 2",
-        cortisol: 8,
-        oxytocin: 3,
-        dopamine: 7,
-        pathologies: [],
+        aspect: "Style & somatics",
+        content:
+          "Somatic metaphors are highly cybernetic but border on cliché in the first paragraph. Fix 'chrome retinas' or 'parietal hum'.",
       },
     ],
-    architectureBrief:
-      "A minimalist, atmospheric character study exploring Fichtean Curve peaks. The main conflict is Hal's decaying hardware vs. the rising temperature of the server room.",
+    executiveSummary:
+      "### StoryScope Executive Summary\n- **Greatest Strengths**: Distinct style voice, good Panksepp differentiation, clean structure brief.\n- **Greatest Weaknesses**: Cliché somatic metaphors in Scene 1, slight drop in dopamine agency in Scene 2.\n- **Draft 2 Action Plan**: Run rewrite_scene on scene_1 to raise Cortisol, and run apply_storyscope_revisions.",
   },
 ];
 
 export default function ChatPage() {
+  const [selectedModel, setSelectedModel] = useState<string>("default");
+  const [customOllamaModel, setCustomOllamaModel] = useState<string>("");
+
   const { messages, sendMessage, status } = useChat();
   const [input, setInput] = useState("");
 
@@ -123,38 +141,92 @@ export default function ChatPage() {
   const [activeStoryId, setActiveStoryId] = useState<string>("the_neon_codex");
   const [selectedChar, setSelectedChar] = useState<Character | null>(null);
 
+  // Folder Directory Ingestion States
+  const [workspaceDir, setWorkspaceDir] = useState<string>(
+    "/home/ty/Documents/writing-workspace",
+  );
+  const [isEditingDir, setIsEditingDir] = useState<boolean>(false);
+  const [dirInput, setDirInput] = useState<string>("");
+
   // Panel Tab States
-  const [leftTab, setLeftTab] = useState<"characters" | "lore">("characters");
-  const [rightTab, setRightTab] = useState<"pacing" | "diagnostics">("pacing");
+  const [leftTab, setLeftTab] = useState<
+    "characters" | "architecture" | "chapters" | "bible"
+  >("characters");
+  const [rightTab, setRightTab] = useState<
+    "pacing" | "diagnostics" | "storyscope"
+  >("pacing");
+
+  // Popover Drawer / Modal States
+  const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null);
+  const [isToolChestOpen, setIsToolChestOpen] = useState<boolean>(false);
+  const [activeTool, setActiveTool] = useState<string>("create_narrative");
+
+  // Accordion state for StoryScope aspect reports
+  const [expandedAspect, setExpandedAspect] = useState<string | null>(null);
+
+  // Tool form inputs
+  const [toolFormState, setToolFormState] = useState<Record<string, any>>({
+    logline: "",
+    genre: "cyberpunk",
+    tone: "dark",
+    target_length: "short_story",
+    charAction: "create",
+    charName: "",
+    charArchetype: "Hero",
+    reviewText: "",
+    reviewSceneId: "scene_1",
+    structurePremise: "",
+    structureDesigningPrinciple: "",
+    rewriteSceneText: "",
+    rewriteTargetAxis: "cortisol",
+    continuePrevSceneId: "scene_1",
+    continueNextSceneId: "scene_2",
+    continueUserDirection: "",
+    batchTargetLength: "novel",
+    biblePremise: "",
+    expandSynopsis: "",
+    expandTargetLength: "novel",
+    expandAutoDraft: true,
+    searchQuery: "",
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isLoading = status === "submitted" || status === "streaming";
 
   // Fetch real workspace data
-  useEffect(() => {
-    async function fetchWorkspace() {
-      try {
-        const res = await fetch("/api/workspace");
-        const data = await res.json();
-        if (data.stories && data.stories.length > 0) {
-          // Merge mock data with real data to ensure a full experience
-          const merged = [...data.stories];
-          MOCK_STORIES.forEach((mock) => {
-            if (!merged.find((s: any) => s.id === mock.id)) {
-              merged.push(mock);
-            }
-          });
-          setStories(merged);
-        }
-      } catch (err) {
-        console.error(
-          "Failed to load workspace, using fallback mock data.",
-          err,
-        );
+  const fetchWorkspace = async () => {
+    try {
+      const res = await fetch("/api/workspace");
+      const data = await res.json();
+      if (data.workspaceDir) {
+        setWorkspaceDir(data.workspaceDir);
+        setDirInput(data.workspaceDir);
       }
+      if (data.stories && data.stories.length > 0) {
+        // Merge mock data with real data to ensure a full experience
+        const merged = [...data.stories];
+        MOCK_STORIES.forEach((mock) => {
+          if (!merged.find((s: any) => s.id === mock.id)) {
+            merged.push(mock);
+          }
+        });
+        setStories(merged);
+      }
+    } catch (err) {
+      console.error("Failed to load workspace, using fallback mock data.", err);
     }
+  };
+
+  useEffect(() => {
     fetchWorkspace();
   }, []);
+
+  // Automatically re-fetch workspace when a tool completes execution (isLoading changes from true to false)
+  useEffect(() => {
+    if (!isLoading) {
+      fetchWorkspace();
+    }
+  }, [isLoading]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -179,13 +251,161 @@ export default function ChatPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-    sendMessage({ text: input });
+    sendMessage(
+      { text: input },
+      {
+        body: {
+          model:
+            selectedModel === "ollama-custom"
+              ? `ollama/${customOllamaModel || "llama3.1:8b"}`
+              : selectedModel,
+        },
+      },
+    );
     setInput("");
   };
 
   const triggerQuickAction = (text: string) => {
     if (isLoading) return;
-    sendMessage({ text });
+    sendMessage(
+      { text },
+      {
+        body: {
+          model:
+            selectedModel === "ollama-custom"
+              ? `ollama/${customOllamaModel || "llama3.1:8b"}`
+              : selectedModel,
+        },
+      },
+    );
+  };
+
+  const handleDirSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirInput.trim()) return;
+    try {
+      const res = await fetch("/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: dirInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.workspaceDir) {
+        setWorkspaceDir(data.workspaceDir);
+        setIsEditingDir(false);
+      }
+      if (data.stories) {
+        const merged = [...data.stories];
+        MOCK_STORIES.forEach((mock) => {
+          if (!merged.find((s: any) => s.id === mock.id)) {
+            merged.push(mock);
+          }
+        });
+        setStories(merged);
+        if (merged.length > 0) {
+          setActiveStoryId(merged[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load new directory", err);
+    }
+  };
+
+  const handleExecuteTool = () => {
+    let prompt = "";
+    const storyId = activeStory?.id || "default_story";
+
+    switch (activeTool) {
+      case "create_narrative":
+        prompt = `Execute tool create_narrative with:
+- logline: "${toolFormState.logline || ""}"
+- genre: "${toolFormState.genre || "cyberpunk"}"
+- tone: "${toolFormState.tone || "dark"}"
+- target_length: "${toolFormState.target_length || "short_story"}"
+- mode: "fast-auto"`;
+        break;
+      case "develop_character":
+        prompt = `Execute tool develop_character with:
+- action: "${toolFormState.charAction || "create"}"
+- name: "${toolFormState.charName || ""}"
+- archetype: "${toolFormState.charArchetype || ""}"
+- story_name: "${storyId}"`;
+        break;
+      case "review_narrative":
+        prompt = `Execute tool review_narrative with:
+- text: "${toolFormState.reviewText || ""}"
+- scope: "scene"
+- story_id: "${storyId}"
+- scene_id: "${toolFormState.reviewSceneId || "scene_1"}"`;
+        break;
+      case "select_structure":
+        prompt = `Execute tool select_structure with:
+- premise: "${toolFormState.structurePremise || ""}"
+- designing_principle: "${toolFormState.structureDesigningPrinciple || ""}"
+- story_name: "${storyId}"`;
+        break;
+      case "rewrite_scene":
+        prompt = `Execute tool rewrite_scene with:
+- scene_text: "${toolFormState.rewriteSceneText || ""}"
+- target_axis: "${toolFormState.rewriteTargetAxis || "cortisol"}"
+- story_id: "${storyId}"`;
+        break;
+      case "continue_narrative":
+        prompt = `Execute tool continue_narrative with:
+- story_id: "${storyId}"
+- previous_scene_id: "${toolFormState.continuePrevSceneId || "scene_1"}"
+- next_scene_id: "${toolFormState.continueNextSceneId || "scene_2"}"
+- user_direction: "${toolFormState.continueUserDirection || ""}"`;
+        break;
+      case "batch_revise_pathologies":
+        prompt = `Execute tool batch_revise_pathologies with:
+- story_id: "${storyId}"
+- target_length: "${toolFormState.batchTargetLength || "novel"}"`;
+        break;
+      case "build_world_bible":
+        prompt = `Execute tool build_world_bible with:
+- story_id: "${storyId}"
+- world_premise: "${toolFormState.biblePremise || ""}"`;
+        break;
+      case "expand_to_novel":
+        prompt = `Execute tool expand_to_novel with:
+- story_id: "${storyId}"
+- synopsis: "${toolFormState.expandSynopsis || ""}"
+- target_length: "${toolFormState.expandTargetLength || "novel"}"
+- auto_draft: ${toolFormState.expandAutoDraft || false}`;
+        break;
+      case "storyscope_final_review":
+        prompt = `Execute tool storyscope_final_review with:
+- story_id: "${storyId}"`;
+        break;
+      case "apply_storyscope_revisions":
+        prompt = `Execute tool apply_storyscope_revisions with:
+- story_id: "${storyId}"`;
+        break;
+      case "web_search":
+        prompt = `Execute tool web_search with:
+- query: "${toolFormState.searchQuery || ""}"`;
+        break;
+      default:
+        return;
+    }
+
+    sendMessage(
+      { text: prompt },
+      {
+        body: {
+          model:
+            selectedModel === "ollama-custom"
+              ? `ollama/${customOllamaModel || "llama3.1:8b"}`
+              : selectedModel,
+        },
+      },
+    );
+    setIsToolChestOpen(false);
+  };
+
+  const updateFormState = (field: string, value: any) => {
+    setToolFormState((prev) => ({ ...prev, [field]: value }));
   };
 
   // Helper to render custom styled markdown paragraphs and headings
@@ -194,36 +414,99 @@ export default function ChatPage() {
     return text.split("\n").map((line, idx) => {
       const trimmed = line.trim();
       if (trimmed.startsWith("# ")) {
-        return <h1 key={idx}>{trimmed.replace("# ", "")}</h1>;
+        return (
+          <h1
+            key={idx}
+            style={{
+              fontSize: "1.3rem",
+              fontWeight: "700",
+              marginTop: "16px",
+              color: "#fff",
+            }}
+          >
+            {trimmed.replace("# ", "")}
+          </h1>
+        );
       }
       if (trimmed.startsWith("## ")) {
-        return <h2 key={idx}>{trimmed.replace("## ", "")}</h2>;
+        return (
+          <h2
+            key={idx}
+            style={{
+              fontSize: "1.15rem",
+              fontWeight: "600",
+              marginTop: "14px",
+              color: "var(--accent-hover)",
+            }}
+          >
+            {trimmed.replace("## ", "")}
+          </h2>
+        );
       }
       if (trimmed.startsWith("### ")) {
-        return <h3 key={idx}>{trimmed.replace("### ", "")}</h3>;
+        return (
+          <h3
+            key={idx}
+            style={{
+              fontSize: "1.02rem",
+              fontWeight: "600",
+              marginTop: "12px",
+              color: "#fff",
+            }}
+          >
+            {trimmed.replace("### ", "")}
+          </h3>
+        );
       }
       if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
         return (
-          <li key={idx} style={{ marginLeft: "16px" }}>
+          <li
+            key={idx}
+            style={{
+              marginLeft: "18px",
+              fontSize: "0.85rem",
+              color: "rgba(255,255,255,0.8)",
+              marginBottom: "4px",
+            }}
+          >
             {trimmed.substring(2)}
           </li>
         );
       }
       if (trimmed.startsWith("```")) {
-        if (trimmed === "```" || trimmed.startsWith("```")) return null; // Simple pre handler
+        if (trimmed === "```" || trimmed.startsWith("```")) return null;
       }
       // Check for bold text **
       if (trimmed.includes("**")) {
         const parts = trimmed.split("**");
         return (
-          <p key={idx}>
+          <p key={idx} style={{ fontSize: "0.88rem", marginBottom: "8px" }}>
             {parts.map((part, i) =>
-              i % 2 === 1 ? <strong key={i}>{part}</strong> : part,
+              i % 2 === 1 ? (
+                <strong key={i} style={{ color: "var(--accent-hover)" }}>
+                  {part}
+                </strong>
+              ) : (
+                part
+              ),
             )}
           </p>
         );
       }
-      return trimmed ? <p key={idx}>{trimmed}</p> : <br key={idx} />;
+      return trimmed ? (
+        <p
+          key={idx}
+          style={{
+            fontSize: "0.88rem",
+            marginBottom: "8px",
+            color: "rgba(255,255,255,0.75)",
+          }}
+        >
+          {trimmed}
+        </p>
+      ) : (
+        <br key={idx} />
+      );
     });
   };
 
@@ -257,7 +540,6 @@ export default function ChatPage() {
       return { x, y };
     };
 
-    // Build paths
     let cortisolPath = "";
     let oxytocinPath = "";
     let dopaminePath = "";
@@ -281,7 +563,6 @@ export default function ChatPage() {
     return (
       <div className="chart-container-ui">
         <svg className="chart-svg" viewBox={`0 0 ${width} ${height}`}>
-          {/* Grid lines */}
           <line
             x1={padding}
             y1={padding}
@@ -305,7 +586,6 @@ export default function ChatPage() {
             strokeDasharray="3"
           />
 
-          {/* Paths */}
           {pointsCount > 1 && (
             <>
               <path
@@ -329,7 +609,6 @@ export default function ChatPage() {
             </>
           )}
 
-          {/* Data Points Dots */}
           {diags.map((d, i) => {
             const cCoords = getCoordinates(d.cortisol, i);
             const oCoords = getCoordinates(d.oxytocin, i);
@@ -387,11 +666,51 @@ export default function ChatPage() {
     <div className="dashboard-layout">
       {/* LEFT PANEL: Workspace Explorer */}
       <aside className="left-sidebar">
-        <div className="panel-header">
+        <div className="panel-header" style={{ paddingBottom: "10px" }}>
           <div className="logo-container">
             <div className="logo-dot"></div>
             <span className="logo-text">Advanced Writer</span>
           </div>
+        </div>
+
+        {/* Directory/Workspace Selection Ingestion Bar */}
+        <div className="workspace-path-bar">
+          <div className="workspace-path-label">
+            <span>Workspace Folder</span>
+            <button
+              onClick={() => setIsEditingDir(!isEditingDir)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--accent-hover)",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              {isEditingDir ? "✕ Cancel" : "✎ Change"}
+            </button>
+          </div>
+          {isEditingDir ? (
+            <form onSubmit={handleDirSubmit} className="workspace-path-form">
+              <input
+                className="workspace-path-input"
+                value={dirInput}
+                onChange={(e) => setDirInput(e.target.value)}
+                placeholder="e.g. /home/ty/Documents/workspace"
+              />
+              <button type="submit" className="workspace-path-btn">
+                Load
+              </button>
+            </form>
+          ) : (
+            <span
+              className="workspace-path-value"
+              onClick={() => setIsEditingDir(true)}
+              title="Click to change workspace folder path"
+            >
+              {workspaceDir}
+            </span>
+          )}
         </div>
 
         <div className="story-selector">
@@ -411,23 +730,39 @@ export default function ChatPage() {
           </select>
         </div>
 
-        <div className="tabs-bar">
+        <div className="tabs-bar" style={{ padding: "0 10px" }}>
           <button
             className={`tab-btn ${leftTab === "characters" ? "active" : ""}`}
             onClick={() => setLeftTab("characters")}
+            style={{ fontSize: "0.72rem", padding: "8px 4px" }}
           >
             Characters
           </button>
           <button
-            className={`tab-btn ${leftTab === "lore" ? "active" : ""}`}
-            onClick={() => setLeftTab("lore")}
+            className={`tab-btn ${leftTab === "chapters" ? "active" : ""}`}
+            onClick={() => setLeftTab("chapters")}
+            style={{ fontSize: "0.72rem", padding: "8px 4px" }}
           >
-            Architecture
+            Chapters
+          </button>
+          <button
+            className={`tab-btn ${leftTab === "bible" ? "active" : ""}`}
+            onClick={() => setLeftTab("bible")}
+            style={{ fontSize: "0.72rem", padding: "8px 4px" }}
+          >
+            Bible
+          </button>
+          <button
+            className={`tab-btn ${leftTab === "architecture" ? "active" : ""}`}
+            onClick={() => setLeftTab("architecture")}
+            style={{ fontSize: "0.72rem", padding: "8px 4px" }}
+          >
+            Structure
           </button>
         </div>
 
-        <div className="scroll-content">
-          {leftTab === "characters" ? (
+        <div className="scroll-content" style={{ marginTop: "10px" }}>
+          {leftTab === "characters" && (
             <>
               <div className="section-title">Archetypal Database</div>
               {activeStory?.characters.map((char, idx) => (
@@ -469,18 +804,92 @@ export default function ChatPage() {
                   </div>
                 </div>
               ))}
+              {(!activeStory?.characters ||
+                activeStory.characters.length === 0) && (
+                <div
+                  style={{
+                    textAlign: "center",
+                    color: "rgba(255,255,255,0.3)",
+                    padding: "20px",
+                  }}
+                >
+                  No characters in database. Use character generator in control
+                  console.
+                </div>
+              )}
             </>
-          ) : (
-            <div
-              style={{
-                padding: "16px",
-                fontSize: "0.85rem",
-                color: "rgba(255,255,255,0.7)",
-              }}
-            >
-              <div className="section-title" style={{ padding: "0 0 10px 0" }}>
-                Designing Principle
-              </div>
+          )}
+
+          {leftTab === "chapters" && (
+            <>
+              <div className="section-title">Chapters & Scene Drafts</div>
+              {activeStory?.drafts &&
+                activeStory.drafts.map((draft) => (
+                  <div
+                    key={draft.id}
+                    className="chapter-item"
+                    onClick={() => setSelectedDraft(draft)}
+                  >
+                    <div className="chapter-title-box">
+                      <span className="chapter-name-text">{draft.title}</span>
+                      <span className="chapter-snippet">
+                        {draft.content.length > 50
+                          ? `${draft.content.slice(0, 50)}...`
+                          : draft.content}
+                      </span>
+                    </div>
+                    <span className="chapter-read-btn">Open</span>
+                  </div>
+                ))}
+              {(!activeStory?.drafts || activeStory.drafts.length === 0) && (
+                <div
+                  style={{
+                    textAlign: "center",
+                    color: "rgba(255,255,255,0.3)",
+                    padding: "20px",
+                  }}
+                >
+                  No drafted scenes found in this story. Outline architecture
+                  and click continue narrative to draft.
+                </div>
+              )}
+            </>
+          )}
+
+          {leftTab === "bible" && (
+            <div style={{ padding: "0 10px" }}>
+              <div className="section-title">World Bible Lore</div>
+              {activeStory?.worldBible ? (
+                <div
+                  style={{
+                    background: "var(--card-bg)",
+                    padding: "14px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--border)",
+                    lineHeight: 1.5,
+                    fontSize: "0.82rem",
+                  }}
+                >
+                  {renderMarkdown(activeStory.worldBible)}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    textAlign: "center",
+                    color: "rgba(255,255,255,0.3)",
+                    padding: "20px",
+                  }}
+                >
+                  No World Bible lore created yet. Run the Build World Bible
+                  tool.
+                </div>
+              )}
+            </div>
+          )}
+
+          {leftTab === "architecture" && (
+            <div style={{ padding: "0 10px" }}>
+              <div className="section-title">Designing Principle</div>
               <div
                 style={{
                   background: "var(--card-bg)",
@@ -488,9 +897,10 @@ export default function ChatPage() {
                   borderRadius: "10px",
                   border: "1px solid var(--border)",
                   lineHeight: 1.5,
+                  fontSize: "0.82rem",
                 }}
               >
-                {activeStory?.architectureBrief}
+                {renderMarkdown(activeStory?.architectureBrief)}
               </div>
             </div>
           )}
@@ -498,19 +908,123 @@ export default function ChatPage() {
       </aside>
 
       {/* CENTER PANEL: Writing Desk & Chat Copilot */}
-      <main className="center-workspace">
-        <div className="panel-header">
-          <div style={{ display: "flex", flexDirection: "column" }}>
+      <main className="center-workspace" style={{ position: "relative" }}>
+        <div
+          className="panel-header"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             <span style={{ fontSize: "0.95rem", fontWeight: "600" }}>
               Pair-Writing Workspace
             </span>
-            <span
-              style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                marginTop: "2px",
+              }}
             >
-              Copilot Model: Claude 3.7 Sonnet
-            </span>
+              <span
+                style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}
+              >
+                Model:
+              </span>
+              <select
+                className="model-select-dropdown"
+                value={selectedModel}
+                onChange={(e) => {
+                  setSelectedModel(e.target.value);
+                  if (e.target.value !== "ollama-custom") {
+                    setCustomOllamaModel("");
+                  }
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--accent-hover)",
+                  fontSize: "0.75rem",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                  outline: "none",
+                  padding: "0",
+                  margin: "0",
+                }}
+              >
+                <option
+                  value="default"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  Default (Env)
+                </option>
+                <option
+                  value="openrouter/deepseek/deepseek-v4-pro"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  DeepSeek v4 Pro (OpenRouter)
+                </option>
+                <option
+                  value="openrouter/deepseek/deepseek-v4-flash"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  DeepSeek v4 Flash (OpenRouter)
+                </option>
+                <option
+                  value="openrouter/anthropic/claude-3.7-sonnet"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  Claude 3.7 Sonnet (OpenRouter)
+                </option>
+                <option
+                  value="openrouter/anthropic/claude-3.5-sonnet"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  Claude 3.5 Sonnet (OpenRouter)
+                </option>
+                <option
+                  value="openrouter/google/gemini-2.5-pro"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  Gemini 2.5 Pro (OpenRouter)
+                </option>
+                <option
+                  value="openrouter/google/gemini-2.5-flash"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  Gemini 2.5 Flash (OpenRouter)
+                </option>
+                <option
+                  value="ollama-custom"
+                  style={{ background: "#1f1f2e", color: "#fff" }}
+                >
+                  Ollama (Local Custom)...
+                </option>
+              </select>
+              {selectedModel === "ollama-custom" && (
+                <input
+                  type="text"
+                  placeholder="e.g. llama3.1:8b"
+                  value={customOllamaModel}
+                  onChange={(e) => setCustomOllamaModel(e.target.value)}
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "4px",
+                    color: "#fff",
+                    fontSize: "0.7rem",
+                    padding: "2px 6px",
+                    width: "100px",
+                    outline: "none",
+                  }}
+                />
+              )}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <span
               className="char-archetype"
               style={{
@@ -520,6 +1034,27 @@ export default function ChatPage() {
             >
               {activeStory?.name}
             </span>
+            <button
+              onClick={() => setIsToolChestOpen(!isToolChestOpen)}
+              style={{
+                background: isToolChestOpen
+                  ? "var(--accent)"
+                  : "rgba(168, 85, 247, 0.12)",
+                color: isToolChestOpen ? "white" : "var(--accent-hover)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                borderRadius: "6px",
+                fontSize: "0.8rem",
+                padding: "6px 12px",
+                cursor: "pointer",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s",
+              }}
+            >
+              🛠 Control Console
+            </button>
           </div>
         </div>
 
@@ -543,9 +1078,8 @@ export default function ChatPage() {
                   lineHeight: "1.5",
                 }}
               >
-                Ask the Copilot to brainstorm character flaws, outline scene
-                beats, or trigger targeted character debates to resolve
-                manuscript pathologies.
+                Use the **Control Console** to generate character sheets, build
+                world bibles, outline structure, and run diagnostic reviews.
               </p>
             </div>
           ) : (
@@ -681,13 +1215,659 @@ export default function ChatPage() {
             </button>
           </form>
         </div>
+
+        {/* Dynamic Tool Chest Overlay Control Panel */}
+        {isToolChestOpen && (
+          <div className="tool-chest-overlay">
+            <div className="tool-chest-header">
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontSize: "0.9rem",
+                    fontWeight: "600",
+                    color: "#fff",
+                  }}
+                >
+                  Narrative Engineering Tool Chest
+                </span>
+                <span
+                  style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}
+                >
+                  Trigger any framework pipeline action visually
+                </span>
+              </div>
+              <button
+                onClick={() => setIsToolChestOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255,255,255,0.4)",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="tool-chest-body">
+              {/* Tool list sidebar */}
+              <div className="tool-list-sidebar">
+                <div
+                  className={`tool-list-item ${activeTool === "create_narrative" ? "active" : ""}`}
+                  onClick={() => setActiveTool("create_narrative")}
+                >
+                  Create Narrative
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "develop_character" ? "active" : ""}`}
+                  onClick={() => setActiveTool("develop_character")}
+                >
+                  Develop Character
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "review_narrative" ? "active" : ""}`}
+                  onClick={() => setActiveTool("review_narrative")}
+                >
+                  Review Narrative
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "select_structure" ? "active" : ""}`}
+                  onClick={() => setActiveTool("select_structure")}
+                >
+                  Select Structure
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "rewrite_scene" ? "active" : ""}`}
+                  onClick={() => setActiveTool("rewrite_scene")}
+                >
+                  Rewrite Scene
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "continue_narrative" ? "active" : ""}`}
+                  onClick={() => setActiveTool("continue_narrative")}
+                >
+                  Continue Narrative
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "batch_revise_pathologies" ? "active" : ""}`}
+                  onClick={() => setActiveTool("batch_revise_pathologies")}
+                >
+                  Batch Revise
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "build_world_bible" ? "active" : ""}`}
+                  onClick={() => setActiveTool("build_world_bible")}
+                >
+                  Build World Bible
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "expand_to_novel" ? "active" : ""}`}
+                  onClick={() => setActiveTool("expand_to_novel")}
+                >
+                  Expand To Novel
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "storyscope_final_review" ? "active" : ""}`}
+                  onClick={() => setActiveTool("storyscope_final_review")}
+                >
+                  StoryScope Review
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "apply_storyscope_revisions" ? "active" : ""}`}
+                  onClick={() => setActiveTool("apply_storyscope_revisions")}
+                >
+                  Apply Revisions
+                </div>
+                <div
+                  className={`tool-list-item ${activeTool === "web_search" ? "active" : ""}`}
+                  onClick={() => setActiveTool("web_search")}
+                >
+                  Web Search
+                </div>
+              </div>
+
+              {/* Tool Parameters Form */}
+              <div className="tool-form-area">
+                {activeTool === "create_narrative" && (
+                  <>
+                    <span className="tool-form-title">
+                      Create Narrative Pipeline
+                    </span>
+                    <span className="tool-form-desc">
+                      Starts the story pipeline (brainstorms characters, sets
+                      structures, drafts Scene 1).
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Premise / Logline
+                        </label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.logline}
+                          onChange={(e) =>
+                            updateFormState("logline", e.target.value)
+                          }
+                          placeholder="e.g. A hacker discovering a sentient virus..."
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Genre</label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.genre}
+                          onChange={(e) =>
+                            updateFormState("genre", e.target.value)
+                          }
+                          placeholder="e.g. cyberpunk, fantasy"
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Tone</label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.tone}
+                          onChange={(e) =>
+                            updateFormState("tone", e.target.value)
+                          }
+                          placeholder="e.g. dark, ironic"
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Target Format
+                        </label>
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.target_length}
+                          onChange={(e) =>
+                            updateFormState("target_length", e.target.value)
+                          }
+                        >
+                          <option value="short_story">Short Story</option>
+                          <option value="novella">Novella</option>
+                          <option value="novel">Novel</option>
+                          <option value="screenplay">Screenplay</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "develop_character" && (
+                  <>
+                    <span className="tool-form-title">
+                      Develop Character Node
+                    </span>
+                    <span className="tool-form-desc">
+                      Creates a deeply flawed archetype and links them to the
+                      story workspace.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Action</label>
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.charAction}
+                          onChange={(e) =>
+                            updateFormState("charAction", e.target.value)
+                          }
+                        >
+                          <option value="create">Create</option>
+                          <option value="list">List All</option>
+                        </select>
+                      </div>
+                      {toolFormState.charAction === "create" && (
+                        <>
+                          <div className="tool-input-group">
+                            <label className="tool-input-label">
+                              Character Name
+                            </label>
+                            <input
+                              className="tool-form-input"
+                              value={toolFormState.charName}
+                              onChange={(e) =>
+                                updateFormState("charName", e.target.value)
+                              }
+                              placeholder="e.g. Lexa, Silas"
+                            />
+                          </div>
+                          <div className="tool-input-group">
+                            <label className="tool-input-label">
+                              Jungian Archetype
+                            </label>
+                            <input
+                              className="tool-form-input"
+                              value={toolFormState.charArchetype}
+                              onChange={(e) =>
+                                updateFormState("charArchetype", e.target.value)
+                              }
+                              placeholder="e.g. Hero, Shadow, Jester"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "review_narrative" && (
+                  <>
+                    <span className="tool-form-title">
+                      Review Narrative (Neuro-diagnostics)
+                    </span>
+                    <span className="tool-form-desc">
+                      Grades scene text on pacing axes and writes critique
+                      report.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Scene Text</label>
+                        <textarea
+                          className="tool-form-textarea"
+                          value={toolFormState.reviewText}
+                          onChange={(e) =>
+                            updateFormState("reviewText", e.target.value)
+                          }
+                          placeholder="Paste narrative scene prose here..."
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Scene Identifier
+                        </label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.reviewSceneId}
+                          onChange={(e) =>
+                            updateFormState("reviewSceneId", e.target.value)
+                          }
+                          placeholder="e.g. scene_1"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "select_structure" && (
+                  <>
+                    <span className="tool-form-title">
+                      Select Structure Paradigm
+                    </span>
+                    <span className="tool-form-desc">
+                      Chooses structural paradigm (Hero's Journey,
+                      Kishōtenketsu, etc.) for the story.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Premise</label>
+                        <textarea
+                          className="tool-form-textarea"
+                          value={toolFormState.structurePremise}
+                          onChange={(e) =>
+                            updateFormState("structurePremise", e.target.value)
+                          }
+                          placeholder="What is the basic storyline?"
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Designing Principle
+                        </label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.structureDesigningPrinciple}
+                          onChange={(e) =>
+                            updateFormState(
+                              "structureDesigningPrinciple",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="e.g. decayed tech vs human growth"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "rewrite_scene" && (
+                  <>
+                    <span className="tool-form-title">
+                      Rewrite Scene (Targeted Pacing Shift)
+                    </span>
+                    <span className="tool-form-desc">
+                      Rewrites scene text focusing on raising cortisol
+                      (tension), oxytocin, or dopamine.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Original Scene Text
+                        </label>
+                        <textarea
+                          className="tool-form-textarea"
+                          value={toolFormState.rewriteSceneText}
+                          onChange={(e) =>
+                            updateFormState("rewriteSceneText", e.target.value)
+                          }
+                          placeholder="Prose to rewrite..."
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Target Axis</label>
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.rewriteTargetAxis}
+                          onChange={(e) =>
+                            updateFormState("rewriteTargetAxis", e.target.value)
+                          }
+                        >
+                          <option value="cortisol">
+                            Cortisol (Tension / Danger)
+                          </option>
+                          <option value="oxytocin">
+                            Oxytocin (Empathy / Connection)
+                          </option>
+                          <option value="dopamine">
+                            Dopamine (Agency / Reward)
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "continue_narrative" && (
+                  <>
+                    <span className="tool-form-title">
+                      Continue Narrative Pipeline
+                    </span>
+                    <span className="tool-form-desc">
+                      Generates the next logical scene using Graph
+                      relationships, world bible lore, and vector lookups.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Previous Scene ID
+                        </label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.continuePrevSceneId}
+                          onChange={(e) =>
+                            updateFormState(
+                              "continuePrevSceneId",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="e.g. scene_1"
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Next Scene ID
+                        </label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.continueNextSceneId}
+                          onChange={(e) =>
+                            updateFormState(
+                              "continueNextSceneId",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="e.g. scene_2"
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          User Direction (Optional)
+                        </label>
+                        <textarea
+                          className="tool-form-textarea"
+                          value={toolFormState.continueUserDirection}
+                          onChange={(e) =>
+                            updateFormState(
+                              "continueUserDirection",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="e.g. Lexa discovers that her deck has been bugged."
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "batch_revise_pathologies" && (
+                  <>
+                    <span className="tool-form-title">
+                      Batch Revise Pathologies
+                    </span>
+                    <span className="tool-form-desc">
+                      Triggers a Character Writer's Room debate for any scene
+                      failing neuro-critique diagnostics, rewrites them, and
+                      recompiles.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Final Target Format
+                        </label>
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.batchTargetLength}
+                          onChange={(e) =>
+                            updateFormState("batchTargetLength", e.target.value)
+                          }
+                        >
+                          <option value="novel">Novel</option>
+                          <option value="novella">Novella</option>
+                          <option value="screenplay">Screenplay</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "build_world_bible" && (
+                  <>
+                    <span className="tool-form-title">Build World Bible</span>
+                    <span className="tool-form-desc">
+                      Generates lore for Factions, Magic/Tech, Economics, and
+                      Geography, and embeds it into vector memory.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          World Premise
+                        </label>
+                        <textarea
+                          className="tool-form-textarea"
+                          value={toolFormState.biblePremise}
+                          onChange={(e) =>
+                            updateFormState("biblePremise", e.target.value)
+                          }
+                          placeholder="Describe the environment and power structure of this world..."
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "expand_to_novel" && (
+                  <>
+                    <span className="tool-form-title">
+                      Expand Synopsis to Novel
+                    </span>
+                    <span className="tool-form-desc">
+                      Explodes a brief synopsis into a structured Beat Sheet and
+                      drafts all scenes consecutively.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Synopsis</label>
+                        <textarea
+                          className="tool-form-textarea"
+                          value={toolFormState.expandSynopsis}
+                          onChange={(e) =>
+                            updateFormState("expandSynopsis", e.target.value)
+                          }
+                          placeholder="A detailed 1-3 page synopsis summary..."
+                        />
+                      </div>
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">
+                          Target Format
+                        </label>
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.expandTargetLength}
+                          onChange={(e) =>
+                            updateFormState(
+                              "expandTargetLength",
+                              e.target.value,
+                            )
+                          }
+                        >
+                          <option value="novel">Novel</option>
+                          <option value="novella">Novella</option>
+                          <option value="screenplay">Screenplay</option>
+                        </select>
+                      </div>
+                      <div
+                        className="tool-input-group"
+                        style={{
+                          flexDirection: "row",
+                          gap: "8px",
+                          alignItems: "center",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          id="autoDraftCheck"
+                          checked={toolFormState.expandAutoDraft}
+                          onChange={(e) =>
+                            updateFormState("expandAutoDraft", e.target.checked)
+                          }
+                        />
+                        <label
+                          htmlFor="autoDraftCheck"
+                          className="tool-input-label"
+                          style={{ cursor: "pointer", margin: 0 }}
+                        >
+                          Auto Draft Chapters (Consecutive Scene Loop)
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === "storyscope_final_review" && (
+                  <>
+                    <span className="tool-form-title">
+                      StoryScope Multi-Agent Review
+                    </span>
+                    <span className="tool-form-desc">
+                      Dispatches 7 parallel analytical specialist agents (Plot,
+                      Agents, Perspective, somatics, Style, Continuity) to
+                      review the entire compiled manuscript.
+                    </span>
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "rgba(255,255,255,0.7)",
+                      }}
+                    >
+                      * Runs automatically on the compiled
+                      **final_manuscript.md** for story: **{activeStory?.name}
+                      **.
+                    </p>
+                  </>
+                )}
+
+                {activeTool === "apply_storyscope_revisions" && (
+                  <>
+                    <span className="tool-form-title">
+                      Apply StoryScope Revisions (Draft 2)
+                    </span>
+                    <span className="tool-form-desc">
+                      Executes Draft 2 pass. Reads the Executive Summary and
+                      rewrites every scene to apply the structural changes.
+                    </span>
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "rgba(255,255,255,0.7)",
+                      }}
+                    >
+                      * Updates all scene drafts for story: **
+                      {activeStory?.name}** using the Executive Summary.
+                    </p>
+                  </>
+                )}
+
+                {activeTool === "web_search" && (
+                  <>
+                    <span className="tool-form-title">
+                      Search Engine Console
+                    </span>
+                    <span className="tool-form-desc">
+                      Performs an external web search to pull reference details.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group">
+                        <label className="tool-input-label">Search Query</label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.searchQuery}
+                          onChange={(e) =>
+                            updateFormState("searchQuery", e.target.value)
+                          }
+                          placeholder="e.g. cybernetic socket interfaces in fiction"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    marginTop: "auto",
+                    borderTop: "1px solid var(--border)",
+                    paddingTop: "14px",
+                  }}
+                >
+                  <button
+                    onClick={handleExecuteTool}
+                    style={{
+                      background: "var(--accent)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontSize: "0.82rem",
+                      fontWeight: "600",
+                      padding: "8px 18px",
+                      cursor: "pointer",
+                      boxShadow: "0 0 15px var(--accent-glow)",
+                    }}
+                  >
+                    🚀 Execute Pipeline
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* RIGHT PANEL: Analytics */}
       <aside className="right-analytics">
         <div className="panel-header">
           <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>
-            Neurochemical & Diagnostics
+            Narrative Analysis & Diagnostics
           </span>
         </div>
 
@@ -695,12 +1875,14 @@ export default function ChatPage() {
           <button
             className={`tab-btn ${rightTab === "pacing" ? "active" : ""}`}
             onClick={() => setRightTab("pacing")}
+            style={{ fontSize: "0.75rem", padding: "8px 4px" }}
           >
             Pacing Chart
           </button>
           <button
             className={`tab-btn ${rightTab === "diagnostics" ? "active" : ""}`}
             onClick={() => setRightTab("diagnostics")}
+            style={{ fontSize: "0.75rem", padding: "8px 4px" }}
           >
             Pathologies (
             {
@@ -708,6 +1890,13 @@ export default function ChatPage() {
                 .length
             }
             )
+          </button>
+          <button
+            className={`tab-btn ${rightTab === "storyscope" ? "active" : ""}`}
+            onClick={() => setRightTab("storyscope")}
+            style={{ fontSize: "0.75rem", padding: "8px 4px" }}
+          >
+            StoryScope Audits
           </button>
         </div>
 
@@ -722,62 +1911,261 @@ export default function ChatPage() {
               >
                 Scene Breakdown
               </div>
-              {activeStory?.diagnostics.map((d, i) => (
-                <div
-                  key={i}
-                  className="diag-item"
-                  style={{ marginBottom: "8px" }}
-                >
-                  <div className="diag-header">
-                    <span className="diag-scene-id">{d.sceneId}</span>
-                    <div className="diag-scores">
-                      <span className="score-badge c">C: {d.cortisol}</span>
-                      <span className="score-badge o">O: {d.oxytocin}</span>
-                      <span className="score-badge d">D: {d.dopamine}</span>
+              <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                {activeStory?.diagnostics.map((d, i) => (
+                  <div
+                    key={i}
+                    className="diag-item"
+                    style={{ marginBottom: "8px" }}
+                  >
+                    <div className="diag-header">
+                      <span className="diag-scene-id">{d.sceneId}</span>
+                      <div className="diag-scores">
+                        <span className="score-badge c">C: {d.cortisol}</span>
+                        <span className="score-badge o">O: {d.oxytocin}</span>
+                        <span className="score-badge d">D: {d.dopamine}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        ) : (
+        ) : rightTab === "diagnostics" ? (
           <div className="diag-list">
             <div className="section-title" style={{ padding: "0 0 10px 0" }}>
               Active Pathologies
             </div>
-            {activeStory?.diagnostics.map(
-              (d, idx) =>
-                d.pathologies.length > 0 && (
-                  <div key={idx} className="diag-item danger">
-                    <div className="diag-header">
-                      <span className="diag-scene-id">{d.sceneId}</span>
+            <div style={{ maxHeight: "450px", overflowY: "auto" }}>
+              {activeStory?.diagnostics.map(
+                (d, idx) =>
+                  d.pathologies.length > 0 && (
+                    <div key={idx} className="diag-item danger">
+                      <div className="diag-header">
+                        <span className="diag-scene-id">{d.sceneId}</span>
+                      </div>
+                      <div className="diag-pathologies">
+                        {d.pathologies.map((pathology, pIdx) => (
+                          <span key={pIdx} className="pathology-badge">
+                            ⚠️ {pathology}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <div className="diag-pathologies">
-                      {d.pathologies.map((pathology, pIdx) => (
-                        <span key={pIdx} className="pathology-badge">
-                          ⚠️ {pathology}
-                        </span>
-                      ))}
-                    </div>
+                  ),
+              )}
+              {activeStory?.diagnostics.every(
+                (d) => d.pathologies.length === 0,
+              ) && (
+                <div
+                  style={{
+                    padding: "40px 0",
+                    textAlign: "center",
+                    color: "rgba(255,255,255,0.3)",
+                  }}
+                >
+                  🎉 Zero pathologies found in current draft scenes.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* STORYSCOPE AUDIT LENSES */
+          <div className="storyscope-container">
+            <div className="section-title" style={{ padding: "0" }}>
+              Multi-Agent Editorial Analysis
+            </div>
+
+            {activeStory?.executiveSummary ? (
+              <>
+                <div className="exec-summary-card">
+                  <div className="exec-summary-title">
+                    <span>📋 Editor's Executive Summary</span>
                   </div>
-                ),
-            )}
-            {activeStory?.diagnostics.every(
-              (d) => d.pathologies.length === 0,
-            ) && (
+                  <div className="exec-summary-text">
+                    {renderMarkdown(activeStory.executiveSummary)}
+                  </div>
+                </div>
+
+                <div className="section-title" style={{ padding: "8px 0 0 0" }}>
+                  Specialist Aspect Lenses
+                </div>
+                <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                  {activeStory.aspectReports &&
+                    activeStory.aspectReports.map((report, idx) => (
+                      <div key={idx} className="aspect-accordion">
+                        <div
+                          className="aspect-header"
+                          onClick={() =>
+                            setExpandedAspect(
+                              expandedAspect === report.aspect
+                                ? null
+                                : report.aspect,
+                            )
+                          }
+                        >
+                          <span className="aspect-title">{report.aspect}</span>
+                          <span
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "rgba(255,255,255,0.4)",
+                            }}
+                          >
+                            {expandedAspect === report.aspect ? "▲" : "▼"}
+                          </span>
+                        </div>
+                        {expandedAspect === report.aspect && (
+                          <div className="aspect-body">
+                            {renderMarkdown(report.content)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </>
+            ) : (
               <div
                 style={{
-                  padding: "40px 0",
                   textAlign: "center",
                   color: "rgba(255,255,255,0.3)",
+                  padding: "40px 10px",
                 }}
               >
-                🎉 Zero pathologies found in current draft scenes.
+                <p style={{ marginBottom: "14px" }}>
+                  No StoryScope reports generated yet.
+                </p>
+                <button
+                  onClick={() => {
+                    setIsToolChestOpen(true);
+                    setActiveTool("storyscope_final_review");
+                  }}
+                  style={{
+                    background: "rgba(168, 85, 247, 0.15)",
+                    color: "var(--accent-hover)",
+                    border: "1px solid rgba(168, 85, 247, 0.3)",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: "600",
+                  }}
+                >
+                  🔍 Run Multi-Agent Audit
+                </button>
               </div>
             )}
           </div>
         )}
       </aside>
+
+      {/* POPUP FULL-SCREEN MANUSCRIPT READER MODAL */}
+      {selectedDraft && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header-ui">
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontSize: "1.05rem",
+                    fontWeight: "600",
+                    color: "#fff",
+                  }}
+                >
+                  {selectedDraft.title}
+                </span>
+                <span
+                  style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}
+                >
+                  Prose Draft (v1)
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedDraft(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255,255,255,0.5)",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body-ui">
+              <div
+                style={{
+                  maxWidth: "700px",
+                  margin: "0 auto",
+                  fontFamily: "Georgia, serif",
+                  lineHeight: 1.8,
+                  fontSize: "1.05rem",
+                  color: "rgba(255,255,255,0.85)",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {renderMarkdown(selectedDraft.content)}
+              </div>
+            </div>
+            <div className="modal-footer-ui">
+              <button
+                onClick={() => {
+                  setSelectedDraft(null);
+                  setIsToolChestOpen(true);
+                  setActiveTool("review_narrative");
+                  updateFormState("reviewText", selectedDraft.content);
+                  updateFormState("reviewSceneId", selectedDraft.id);
+                }}
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  color: "#fff",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  padding: "8px 14px",
+                  cursor: "pointer",
+                }}
+              >
+                🔍 Analyze Diagnostics
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedDraft(null);
+                  setIsToolChestOpen(true);
+                  setActiveTool("rewrite_scene");
+                  updateFormState("rewriteSceneText", selectedDraft.content);
+                }}
+                style={{
+                  background: "rgba(168, 85, 247, 0.15)",
+                  color: "var(--accent-hover)",
+                  border: "1px solid rgba(168, 85, 247, 0.3)",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  padding: "8px 14px",
+                  cursor: "pointer",
+                }}
+              >
+                ✍ Rewrite Scene
+              </button>
+              <button
+                onClick={() => setSelectedDraft(null)}
+                style={{
+                  background: "var(--accent)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  fontWeight: "600",
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

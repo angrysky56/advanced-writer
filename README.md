@@ -55,6 +55,8 @@ The system includes a premium Next.js Web UI for direct, interactive pair-progra
 - **Reasoning Display**: Renders any reasoning/thinking steps taken by the AI in a distinct styled block.
 - **Local Execution**: Runs alongside the MCP server.
 
+![Web UI](Screenshot_2026-06-21_15-48-13.png)
+
 ### Running the Web UI
 
 1.  Make sure dependencies are installed and the project is built:

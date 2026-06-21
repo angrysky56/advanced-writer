@@ -3,10 +3,8 @@ import path from "path";
 import { ENV } from "../config.js";
 
 export class WorkspaceExporter {
-  private baseDir: string;
-
-  constructor() {
-    this.baseDir = ENV.WORKSPACE_DIR;
+  get baseDir(): string {
+    return process.env.WORKSPACE_DIR || ENV.WORKSPACE_DIR;
   }
 
   private async ensureDir(dirPath: string) {
