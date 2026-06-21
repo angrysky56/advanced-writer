@@ -13,7 +13,7 @@
     "lint": "eslint src/",
     "format": "prettier --write src/",
     "auto-draft": "npm run build && node dist/cli/auto-draft.js",
-    "dev:ui": "next dev"
+    "dev:ui": "next dev --webpack"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",
