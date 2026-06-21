@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
+import { neo4jStorage } from "../storage/neo4j.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,30 @@ export async function executeStoryscopeFinalReview(args: any) {
       };
     }
 
+    const architecture =
+      (await workspaceExporter.readArchitectureBrief(story_id)) ||
+      "Architecture not found.";
+
+    // We need a readWorldBible method, if it doesn't exist we can just read the file directly
+    let worldBible = "";
+    try {
+      const storySlug = story_id.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+      worldBible = await fs.promises.readFile(
+        path.join(
+          process.env.WORKSPACE_DIR || "./data/workspace",
+          storySlug,
+          "structure",
+          "world-bible.md",
+        ),
+        "utf8",
+      );
+    } catch {
+      worldBible = "World bible not found.";
+    }
+
+    const storyState = await neo4jStorage.getStoryState(story_id);
+    const graphStateContext = JSON.stringify(storyState, null, 2);
+
     const promptsDir = path.join(__dirname, "../references/storyscope-prompts");
     const promptFiles = await fs.promises.readdir(promptsDir);
     const aspectFiles = promptFiles.filter(
@@ -75,7 +100,20 @@ export async function executeStoryscopeFinalReview(args: any) {
       const report = await aiRouter.generateCompletion({
         taskType: "diagnostic",
         systemPrompt: modifiedPrompt,
-        userMessage: `Here is the final manuscript. Analyze it completely.\n\n=== MANUSCRIPT ===\n${manuscript}`,
+        userMessage: `You are evaluating a manuscript against its foundational "Canon" documents.
+Identify any discrepancies, character arc failures, or continuity errors based on the World Bible and Graph State.
+
+=== ARCHITECTURE BRIEF ===
+${architecture}
+
+=== WORLD BIBLE ===
+${worldBible}
+
+=== NEO4J GRAPH STATE (CHARACTERS & ENTITIES) ===
+${graphStateContext}
+
+=== FINAL MANUSCRIPT ===
+${manuscript}`,
       });
 
       await workspaceExporter.saveStoryscopeReport(
