@@ -66,7 +66,8 @@ ${executiveSummary}
 - Read the scene below.
 - Look at the Executive Summary. If it says "Cut every third 'as if'", do it. If it says "Deepen the social world", add a secondary character reaction if appropriate.
 - You must rewrite the entire scene from start to finish.
-- DO NOT summarize. Output the fully rewritten scene prose.`;
+- DO NOT summarize. Output the fully rewritten scene prose.
+- CRITICAL CONTINUITY RULE: Do NOT "correct" intentional stylistic misspellings, character voice quirks, or code snippets. Treat technical terms and stylistic choices as canon.`;
 
       const rewrittenScene = await aiRouter.generateCompletion({
         taskType: "generation",

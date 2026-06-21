@@ -54,11 +54,9 @@ export async function executeContinueNarrative(args: any) {
       .initialize()
       .catch(() => console.warn("Chroma init failed"));
 
-    const characters = await neo4jStorage.getCharactersForStory(story_id);
-    const characterContext =
-      characters.length > 0
-        ? JSON.stringify(characters, null, 2)
-        : "No character profiles found in Graph DB.";
+    // Fetch the Living Graph State
+    const storyState = await neo4jStorage.getStoryState(story_id);
+    const graphStateContext = JSON.stringify(storyState, null, 2);
 
     const semanticScenes = await chromaStorage.searchScenes(
       user_direction || "next scene",
@@ -86,8 +84,8 @@ ${architecture}
 === WORLD BIBLE LORE ===
 ${worldLoreContext}
 
-=== GRAPH DB CHARACTER PROFILES ===
-${characterContext}
+=== GRAPH DB STORY STATE (CHARACTERS, ENTITIES, RELATIONSHIPS) ===
+${graphStateContext}
 
 === VECTOR DB RELEVANT SCENES ===
 ${plotContext}
@@ -132,6 +130,64 @@ Maintain the established prose style. Do not summarize the previous scene; pick 
       next_scene_id,
       diagnostic,
     );
+
+    // Run Continuity Extraction to update Neo4j
+    const continuityPrompt = `You are a strict data extractor. Analyze the new scene and extract continuity state changes.
+Output ONLY valid JSON matching this structure:
+{
+  "character_updates": [ { "name": "Character Name", "arc_progression": "What changed for them in this scene" } ],
+  "new_entities": [ { "name": "Entity Name", "type": "Animal/Prop/Location", "description": "Brief description" } ],
+  "new_relationships": [ { "subject": "Name1", "relation": "OWNS/KNOWS/AT", "object": "Name2" } ]
+}
+If no updates, return empty arrays. DO NOT include markdown formatting.
+Scene:
+${newDraft}`;
+    const continuityExtraction = await aiRouter.generateCompletion({
+      taskType: "generation",
+      systemPrompt: continuityPrompt,
+      userMessage: "Extract continuity state.",
+    });
+
+    try {
+      // Very basic JSON parse (assumes LLM followed strict JSON format)
+      const cleanJson = continuityExtraction
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+      const stateData = JSON.parse(cleanJson);
+
+      if (stateData.character_updates) {
+        for (const update of stateData.character_updates) {
+          await neo4jStorage.updateCharacterState(
+            story_id,
+            update.name,
+            update.arc_progression,
+          );
+        }
+      }
+      if (stateData.new_entities) {
+        for (const entity of stateData.new_entities) {
+          await neo4jStorage.addEntity(
+            story_id,
+            entity.name,
+            entity.type,
+            entity.description,
+          );
+        }
+      }
+      if (stateData.new_relationships) {
+        for (const rel of stateData.new_relationships) {
+          await neo4jStorage.addEntityRelationship(
+            story_id,
+            rel.subject,
+            rel.object,
+            rel.relation,
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to parse continuity extraction", e);
+    }
 
     return {
       content: [

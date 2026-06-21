@@ -34,7 +34,9 @@ export class Neo4jStorage {
           hamartia: $hamartia,
           shadow: $shadow,
           individuation_state: $individuation_state,
-          panksepp_primary: $panksepp_primary
+          panksepp_primary: $panksepp_primary,
+          story_ids: $story_ids,
+          current_state: $current_state
         }
         `,
         {
@@ -45,6 +47,8 @@ export class Neo4jStorage {
           shadow: character.metadata.shadow,
           individuation_state: character.metadata.individuation_state,
           panksepp_primary: character.metadata.panksepp_primary,
+          story_ids: character.metadata.story_ids || [],
+          current_state: "Initial state.",
         },
       );
     } finally {
@@ -68,6 +72,56 @@ export class Neo4jStorage {
     }
   }
 
+  async getStoryState(storyId: string): Promise<any> {
+    const session = this.getSession();
+    try {
+      const charsResult = await session.run(
+        `
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids
+        RETURN c
+        `,
+        { storyId },
+      );
+      const characters = charsResult.records.map(
+        (record) => record.get("c").properties,
+      );
+
+      const entitiesResult = await session.run(
+        `
+        MATCH (e:Entity)
+        WHERE $storyId IN e.story_ids
+        RETURN e
+        `,
+        { storyId },
+      );
+      const entities = entitiesResult.records.map(
+        (record) => record.get("e").properties,
+      );
+
+      const relsResult = await session.run(
+        `
+        MATCH (n)-[r]->(m)
+        WHERE ($storyId IN n.story_ids) AND ($storyId IN m.story_ids)
+        RETURN n.name AS subject, type(r) AS relation, m.name AS object
+        `,
+        { storyId },
+      );
+      const relationships = relsResult.records.map((r) => ({
+        subject: r.get("subject"),
+        relation: r.get("relation"),
+        object: r.get("object"),
+      }));
+
+      return { characters, entities, relationships };
+    } catch (e) {
+      console.error("Neo4j retrieve error:", e);
+      return { characters: [], entities: [], relationships: [] };
+    } finally {
+      await session.close();
+    }
+  }
+
   async getCharactersForStory(storyId: string): Promise<any[]> {
     const session = this.getSession();
     try {
@@ -79,7 +133,6 @@ export class Neo4jStorage {
         `,
         { storyId },
       );
-
       return result.records.map((record) => record.get("c").properties);
     } catch (e) {
       console.error("Neo4j retrieve error:", e);
@@ -89,7 +142,78 @@ export class Neo4jStorage {
     }
   }
 
-  // We can add more specific cypher queries here based on NEXT-STEPS.md
+  async updateCharacterState(
+    storyId: string,
+    characterName: string,
+    stateUpdate: string,
+  ) {
+    const session = this.getSession();
+    try {
+      await session.run(
+        `
+        MATCH (c:Character {name: $name})
+        WHERE $storyId IN c.story_ids
+        SET c.current_state = c.current_state + " | " + $stateUpdate
+        `,
+        { name: characterName, storyId, stateUpdate },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async addEntity(
+    storyId: string,
+    entityName: string,
+    type: string,
+    description: string,
+  ) {
+    const session = this.getSession();
+    try {
+      const id = `${storyId}_entity_${entityName.replace(/\\s+/g, "_").toLowerCase()}`;
+      await session.run(
+        `
+        MERGE (e:Entity { id: $id })
+        ON CREATE SET e.story_ids = [$storyId]
+        ON MATCH SET e.story_ids = CASE WHEN NOT $storyId IN e.story_ids THEN e.story_ids + $storyId ELSE e.story_ids END
+        SET e += {
+          name: $name,
+          type: $type,
+          description: $description
+        }
+        `,
+        { id, storyId, name: entityName, type, description },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async addEntityRelationship(
+    storyId: string,
+    subjectName: string,
+    objectName: string,
+    relation: string,
+  ) {
+    const session = this.getSession();
+    try {
+      // Find nodes by name and storyId. relation cannot be parameterized as a label directly in cypher.
+      // We will use APOC if available or dynamic query creation.
+      // For simplicity, we just use string replacement for relation type (sanitize first)
+      const relType = relation.replace(/[^A-Z_]/gi, "_").toUpperCase();
+
+      await session.run(
+        `
+        MATCH (s) WHERE s.name = $subjectName AND $storyId IN s.story_ids
+        MATCH (o) WHERE o.name = $objectName AND $storyId IN o.story_ids
+        MERGE (s)-[r:${relType}]->(o)
+        `,
+        { storyId, subjectName, objectName },
+      );
+    } finally {
+      await session.close();
+    }
+  }
 }
 
 export const neo4jStorage = new Neo4jStorage();
