@@ -8,6 +8,7 @@ interface Character {
   name: string;
   archetype: string;
   description: string;
+  summary: string;
   panksepp: Record<string, number>;
 }
 
@@ -38,6 +39,121 @@ function getWorkspaceDir() {
   return process.env.WORKSPACE_DIR || ENV.WORKSPACE_DIR;
 }
 
+// Helpers for character parsing
+function extractCharacterName(content: string, filename: string): string {
+  const nameLabelMatch = content.match(
+    /^(?:\*\*|)?Character Name(?:\*\*|)?\s*:\s*([^\n\r]+)/im,
+  );
+  if (nameLabelMatch) {
+    const val = nameLabelMatch[1].replace(/[\*\_\[\]]/g, "").trim();
+    if (val && !val.includes("[Full Name]")) return val;
+  }
+
+  const headerMatch = content.match(
+    /^(?:###|##|#)\s*(?:Character Profile\s*:\s*)?([^\n\r]+)/im,
+  );
+  if (headerMatch) {
+    const val = headerMatch[1].replace(/[\*\_\[\]]/g, "").trim();
+    if (val && !val.toLowerCase().includes("[full name]")) return val;
+  }
+
+  return filename
+    .replace(".md", "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function extractArchetype(content: string): string {
+  const archMatch = content.match(
+    /^(?:\*\*|)?(?:Jungian\s+|Primary\s+)?Archetype(?:\*\*|)?\s*:\s*([^\n\r]+)/im,
+  );
+  if (archMatch) {
+    return archMatch[1].replace(/[\*\_\[\]]/g, "").trim();
+  }
+  const lines = content.split("\n");
+  const archLine = lines.find((l) => l.toLowerCase().includes("archetype"));
+  if (archLine) {
+    const cleanLine = archLine
+      .replace(/#|-|archetype|:/gi, "")
+      .replace(/[\*\_\[\]]/g, "")
+      .trim();
+    if (cleanLine) return cleanLine;
+  }
+  return "Archetype";
+}
+
+function extractPanksepp(
+  content: string,
+  hash: number,
+): Record<string, number> {
+  let seeking = 5 + (hash % 5);
+  let fear = 2 + (hash % 8);
+  let rage = 1 + (hash % 6);
+  let panic = 2 + (hash % 7);
+  let play = 4 + (hash % 6);
+  let care = 3 + (hash % 7);
+
+  const seekingMatch = content.match(/seek(?:ing)?\s*:\s*(\d+)/i);
+  const fearMatch = content.match(/fear\s*:\s*(\d+)/i);
+  const rageMatch = content.match(/rage\s*:\s*(\d+)/i);
+  const panicMatch = content.match(/panic\s*:\s*(\d+)/i);
+  const playMatch = content.match(/play\s*:\s*(\d+)/i);
+  const careMatch = content.match(/care\s*:\s*(\d+)/i);
+
+  if (seekingMatch) seeking = parseInt(seekingMatch[1], 10);
+  if (fearMatch) fear = parseInt(fearMatch[1], 10);
+  if (rageMatch) rage = parseInt(rageMatch[1], 10);
+  if (panicMatch) panic = parseInt(panicMatch[1], 10);
+  if (playMatch) play = parseInt(playMatch[1], 10);
+  if (careMatch) care = parseInt(careMatch[1], 10);
+
+  return {
+    SEEKING: seeking,
+    FEAR: fear,
+    RAGE: rage,
+    PANIC: panic,
+    PLAY: play,
+    CARE: care,
+  };
+}
+
+function getCleanSummary(content: string): string {
+  const lines = content.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (
+      trimmed.startsWith("#") ||
+      trimmed.startsWith("<!--") ||
+      trimmed.startsWith("---")
+    )
+      continue;
+    if (
+      trimmed.startsWith("**Role:**") ||
+      trimmed.startsWith("**Character Name:**") ||
+      trimmed.startsWith("**Archetype:**") ||
+      trimmed.startsWith("**Jungian Archetype:**")
+    )
+      continue;
+    if (
+      trimmed.startsWith("Role:") ||
+      trimmed.startsWith("Character Name:") ||
+      trimmed.startsWith("Archetype:") ||
+      trimmed.startsWith("Jungian Archetype:")
+    )
+      continue;
+
+    const clean = trimmed
+      .replace(/[\*\_\[\]]/g, "")
+      .replace(/<[^>]*>/g, "")
+      .trim();
+    if (clean.length > 10) {
+      return clean.length > 120 ? clean.slice(0, 120) + "..." : clean;
+    }
+  }
+  return "No summary description available.";
+}
+
 export async function GET() {
   try {
     const baseDir = getWorkspaceDir();
@@ -49,6 +165,9 @@ export async function GET() {
     }
 
     const dirs = await fs.promises.readdir(baseDir);
+    dirs.sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+    );
     const stories = [];
 
     for (const dirName of dirs) {
@@ -65,39 +184,30 @@ export async function GET() {
       const charDir = path.join(storyPath, "characters");
       if (fs.existsSync(charDir)) {
         const charFiles = await fs.promises.readdir(charDir);
+        charFiles.sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
         for (const file of charFiles) {
           if (!file.endsWith(".md")) continue;
           const content = await fs.promises.readFile(
             path.join(charDir, file),
             "utf8",
           );
-          const name = file
-            .replace(".md", "")
-            .replace(/\b\w/g, (c) => c.toUpperCase());
-
-          let archetype = "Archetype";
-          if (content.toLowerCase().includes("archetype")) {
-            const lines = content.split("\n");
-            const archLine = lines.find((l) =>
-              l.toLowerCase().includes("archetype"),
-            );
-            if (archLine)
-              archetype = archLine.replace(/#|-|archetype|:/gi, "").trim();
-          }
-
+          const name = extractCharacterName(content, file);
+          const archetype = extractArchetype(content);
           const hash = name
             .split("")
             .reduce((acc, c) => acc + c.charCodeAt(0), 0);
-          const panksepp = {
-            SEEKING: 5 + (hash % 5),
-            FEAR: 2 + (hash % 8),
-            RAGE: 1 + (hash % 6),
-            PANIC: 2 + (hash % 7),
-            PLAY: 4 + (hash % 6),
-            CARE: 3 + (hash % 7),
-          };
+          const panksepp = extractPanksepp(content, hash);
+          const summary = getCleanSummary(content);
 
-          characters.push({ name, archetype, description: content, panksepp });
+          characters.push({
+            name,
+            archetype,
+            description: content,
+            summary,
+            panksepp,
+          });
         }
       }
 
@@ -106,6 +216,9 @@ export async function GET() {
       const diagDir = path.join(storyPath, "diagnostics");
       if (fs.existsSync(diagDir)) {
         const diagFiles = await fs.promises.readdir(diagDir);
+        diagFiles.sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
         for (const file of diagFiles) {
           if (!file.endsWith(".md")) continue;
           const content = await fs.promises.readFile(
@@ -173,6 +286,9 @@ export async function GET() {
       const draftsDir = path.join(storyPath, "drafts", "v1");
       if (fs.existsSync(draftsDir)) {
         const draftFiles = await fs.promises.readdir(draftsDir);
+        draftFiles.sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
         for (const file of draftFiles) {
           if (!file.endsWith(".md")) continue;
           const content = await fs.promises.readFile(
@@ -193,6 +309,9 @@ export async function GET() {
       const reportsDir = path.join(storyPath, "storyscope-reports");
       if (fs.existsSync(reportsDir)) {
         const reportFiles = await fs.promises.readdir(reportsDir);
+        reportFiles.sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
         for (const file of reportFiles) {
           if (!file.endsWith(".md")) continue;
           const content = await fs.promises.readFile(

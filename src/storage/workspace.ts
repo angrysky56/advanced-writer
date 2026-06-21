@@ -139,7 +139,11 @@ export class WorkspaceExporter {
     const dir = path.join(this.baseDir, storySlug, "drafts", version);
     try {
       const files = await fs.promises.readdir(dir);
-      const markdownFiles = files.filter((f) => f.endsWith(".md")).sort();
+      const markdownFiles = files
+        .filter((f) => f.endsWith(".md"))
+        .sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
       let compiled = "";
       for (const file of markdownFiles) {
         const content = await fs.promises.readFile(
@@ -162,7 +166,11 @@ export class WorkspaceExporter {
     const dir = path.join(this.baseDir, storySlug, "drafts", version);
     try {
       const files = await fs.promises.readdir(dir);
-      return files.filter((f) => f.endsWith(".md")).sort();
+      return files
+        .filter((f) => f.endsWith(".md"))
+        .sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
     } catch {
       return [];
     }
@@ -190,7 +198,11 @@ export class WorkspaceExporter {
 
     try {
       const files = await fs.promises.readdir(diagnosticsDir);
-      const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
+      const mdFiles = files
+        .filter((f) => f.endsWith(".md"))
+        .sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
       const results = [];
       for (const file of mdFiles) {
         const content = await fs.promises.readFile(

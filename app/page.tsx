@@ -8,6 +8,7 @@ interface Character {
   name: string;
   archetype: string;
   description: string;
+  summary?: string;
   panksepp: Record<string, number>;
 }
 
@@ -140,6 +141,7 @@ export default function ChatPage() {
   const [stories, setStories] = useState<Story[]>(MOCK_STORIES);
   const [activeStoryId, setActiveStoryId] = useState<string>("the_neon_codex");
   const [selectedChar, setSelectedChar] = useState<Character | null>(null);
+  const [viewingChar, setViewingChar] = useState<Character | null>(null);
 
   // Folder Directory Ingestion States
   const [workspaceDir, setWorkspaceDir] = useState<string>(
@@ -769,13 +771,19 @@ export default function ChatPage() {
                 <div
                   key={idx}
                   className={`character-card ${selectedChar?.name === char.name ? "active" : ""}`}
-                  onClick={() => setSelectedChar(char)}
+                  onClick={() => {
+                    setSelectedChar(char);
+                    setViewingChar(char);
+                  }}
+                  title="Click to view detailed character sheet"
                 >
                   <div className="char-header">
                     <span className="char-name">{char.name}</span>
                     <span className="char-archetype">{char.archetype}</span>
                   </div>
-                  <p className="char-desc">{char.description}</p>
+                  <p className="char-desc">
+                    {char.summary || char.description}
+                  </p>
 
                   <div className="panksepp-container">
                     <div className="panksepp-bar">
@@ -2149,6 +2157,266 @@ export default function ChatPage() {
               </button>
               <button
                 onClick={() => setSelectedDraft(null)}
+                style={{
+                  background: "var(--accent)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  fontWeight: "600",
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP FULL-SCREEN CHARACTER PROFILE SHEET MODAL */}
+      {viewingChar && (
+        <div className="modal-overlay">
+          <div
+            className="modal-content"
+            style={{ maxWidth: "900px", width: "95vw" }}
+          >
+            <div className="modal-header-ui">
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontSize: "1.15rem",
+                    fontWeight: "700",
+                    color: "#fff",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {viewingChar.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.72rem",
+                    color: "var(--accent-hover)",
+                    fontWeight: "500",
+                  }}
+                >
+                  Psychological & Archetypal Character Sheet
+                </span>
+              </div>
+              <button
+                onClick={() => setViewingChar(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255,255,255,0.5)",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body-ui" style={{ padding: "20px 24px" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.8fr",
+                  gap: "28px",
+                }}
+              >
+                {/* Left Column: Stats & Profile */}
+                <div
+                  style={{
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "12px",
+                    padding: "20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "18px",
+                    height: "fit-content",
+                  }}
+                >
+                  <div>
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        color: "rgba(255,255,255,0.4)",
+                      }}
+                    >
+                      Name
+                    </span>
+                    <h3
+                      style={{
+                        fontSize: "1.3rem",
+                        fontWeight: "600",
+                        color: "#fff",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {viewingChar.name}
+                    </h3>
+                  </div>
+
+                  <div>
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        color: "rgba(255,255,255,0.4)",
+                      }}
+                    >
+                      Jungian Archetype
+                    </span>
+                    <div style={{ marginTop: "4px" }}>
+                      <span
+                        className="char-archetype"
+                        style={{
+                          fontSize: "0.8rem",
+                          padding: "4px 8px",
+                          background: "rgba(168,85,247,0.15)",
+                          color: "var(--accent-hover)",
+                        }}
+                      >
+                        {viewingChar.archetype}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        color: "rgba(255,255,255,0.4)",
+                        marginBottom: "8px",
+                        display: "block",
+                      }}
+                    >
+                      Panksepp Affect Profile
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        marginTop: "6px",
+                      }}
+                    >
+                      {Object.entries(viewingChar.panksepp).map(
+                        ([affect, val]) => {
+                          let barColor = "var(--accent)";
+                          if (affect === "FEAR") barColor = "var(--cortisol)";
+                          if (affect === "RAGE") barColor = "#ef4444";
+                          if (affect === "SEEKING")
+                            barColor = "var(--dopamine)";
+                          if (affect === "CARE") barColor = "var(--oxytocin)";
+                          if (affect === "PLAY") barColor = "#10b981";
+                          if (affect === "PANIC") barColor = "#f59e0b";
+
+                          return (
+                            <div
+                              key={affect}
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "3px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  fontSize: "0.68rem",
+                                  fontWeight: "500",
+                                }}
+                              >
+                                <span
+                                  style={{ color: "rgba(255,255,255,0.7)" }}
+                                >
+                                  {affect}
+                                </span>
+                                <span style={{ color: barColor }}>
+                                  {val}/10
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  height: "6px",
+                                  width: "100%",
+                                  background: "rgba(255,255,255,0.05)",
+                                  borderRadius: "3px",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    height: "100%",
+                                    width: `${val * 10}%`,
+                                    background: barColor,
+                                    borderRadius: "3px",
+                                    boxShadow: `0 0 8px ${barColor}80`,
+                                  }}
+                                ></div>
+                              </div>
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Detailed Markdown Profile */}
+                <div
+                  style={{
+                    maxHeight: "550px",
+                    overflowY: "auto",
+                    paddingRight: "8px",
+                    lineHeight: "1.6",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.9rem",
+                      color: "rgba(255,255,255,0.85)",
+                    }}
+                  >
+                    {renderMarkdown(viewingChar.description)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer-ui">
+              <button
+                onClick={() => {
+                  setViewingChar(null);
+                  setIsToolChestOpen(true);
+                  setActiveTool("develop_character");
+                  updateFormState("charAction", "update");
+                  updateFormState("charName", viewingChar.name);
+                }}
+                style={{
+                  background: "rgba(168, 85, 247, 0.15)",
+                  color: "var(--accent-hover)",
+                  border: "1px solid rgba(168, 85, 247, 0.3)",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  padding: "8px 14px",
+                  cursor: "pointer",
+                }}
+              >
+                ✍ Edit Profile
+              </button>
+              <button
+                onClick={() => setViewingChar(null)}
                 style={{
                   background: "var(--accent)",
                   color: "white",
