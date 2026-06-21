@@ -62,23 +62,25 @@ export async function executeCreateNarrative(args: any) {
     });
     await workspaceExporter.saveArchitectureBrief(storyName, architecture);
 
-    // 2. Main Character
-    const charPrompt = `Based on this logline: ${logline}, generate a Jungian character profile for the protagonist.`;
-    const character = await aiRouter.generateCompletion({
+    // 2. Character Cast Generation
+    // Generate Protagonist
+    const protagonistPrompt = `Based on this logline: ${logline}, generate a deeply flawed Jungian character profile for the Protagonist.
+Detail their core desires, archetype, hamartia (tragic flaw), shadow self, moral weakness, and Panksepp affect profile (e.g. SEEKING, FEAR, RAGE, PANIC, PLAY, CARE).`;
+    const protagonistContent = await aiRouter.generateCompletion({
       taskType: "generation",
-      systemPrompt: charPrompt,
+      systemPrompt: protagonistPrompt,
       userMessage: "Generate the protagonist character profile.",
     });
     await workspaceExporter.saveCharacterProfile(
       storyName,
       "protagonist",
-      character,
+      protagonistContent,
     );
 
-    // Save to Neo4j
+    // Save Protagonist to Neo4j
     await neo4jStorage.createCharacterNode({
       id: `${storyName}_protagonist`,
-      document: character,
+      document: protagonistContent,
       metadata: {
         name: "Protagonist",
         archetype: "The Hero",
@@ -88,6 +90,82 @@ export async function executeCreateNarrative(args: any) {
         individuation_state: "Pre-Awareness",
         role: "Main",
         panksepp_primary: "SEEKING",
+        story_ids: [storyName],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    // Generate Co-Star (Deuteragonist / Antagonist / Rival)
+    const costarPrompt = `Based on this logline: ${logline} and the Protagonist's profile below, generate a deeply flawed Jungian character profile for a Co-Star (either a foil, rival, or antagonist) who creates strong thematic tension.
+Detail their core desires, archetype, hamartia, shadow self, moral weakness, and relationship to the Protagonist.
+
+=== PROTAGONIST ===
+${protagonistContent}`;
+    const costarContent = await aiRouter.generateCompletion({
+      taskType: "generation",
+      systemPrompt: costarPrompt,
+      userMessage: "Generate the co-star character profile.",
+    });
+    await workspaceExporter.saveCharacterProfile(
+      storyName,
+      "co_star",
+      costarContent,
+    );
+
+    // Save Co-Star to Neo4j
+    await neo4jStorage.createCharacterNode({
+      id: `${storyName}_co_star`,
+      document: costarContent,
+      metadata: {
+        name: "Co-Star",
+        archetype: "The Shadow",
+        hamartia: "Obsession",
+        shadow: "The Destroyer",
+        moral_weakness: "Envy",
+        individuation_state: "Pre-Awareness",
+        role: "Co-Star",
+        panksepp_primary: "RAGE",
+        story_ids: [storyName],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    // Generate Supporting Character
+    const supportingPrompt = `Based on this logline: ${logline} and the existing cast below, generate a Jungian character profile for a Supporting Character (e.g. mentor, sidekick, or witness) who aids or complicates the narrative progression.
+Detail their core desires, archetype, hamartia, shadow self, and Panksepp profile.
+
+=== CAST ===
+Protagonist:
+${protagonistContent}
+
+Co-Star:
+${costarContent}`;
+    const supportingContent = await aiRouter.generateCompletion({
+      taskType: "generation",
+      systemPrompt: supportingPrompt,
+      userMessage: "Generate the supporting character profile.",
+    });
+    await workspaceExporter.saveCharacterProfile(
+      storyName,
+      "supporting",
+      supportingContent,
+    );
+
+    // Save Supporting Character to Neo4j
+    await neo4jStorage.createCharacterNode({
+      id: `${storyName}_supporting`,
+      document: supportingContent,
+      metadata: {
+        name: "Supporting",
+        archetype: "The Mentor",
+        hamartia: "Secret Grief",
+        shadow: "The Deceiver",
+        moral_weakness: "Cowardice",
+        individuation_state: "Aligned",
+        role: "Supporting",
+        panksepp_primary: "CARE",
         story_ids: [storyName],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
