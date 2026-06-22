@@ -1,6 +1,12 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
-import { streamText, tool, zodSchema, stepCountIs } from "ai";
+import {
+  streamText,
+  tool,
+  zodSchema,
+  stepCountIs,
+  convertToModelMessages,
+} from "ai";
 import { z } from "zod";
 
 // Import tool executors
@@ -94,9 +100,12 @@ export async function POST(req: Request) {
     });
   }
 
+  // useChat sends UI messages (with `parts`); streamText needs model messages.
+  const modelMessages = await convertToModelMessages(messages);
+
   const result = streamText({
     model: chatModel,
-    messages,
+    messages: modelMessages,
     system:
       "You are an autonomous AI Novel Writing Copilot. You orchestrate the tools to write, review, and revise stories. " +
       "If the user asks for Draft 3, and Draft 2 exists, you should run storyscope_final_review on Draft 2, and then run apply_storyscope_revisions to generate Draft 3. " +
@@ -425,5 +434,8 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toTextStreamResponse();
+  // useChat expects the UI message stream protocol (text + reasoning + tool
+  // parts), which the frontend renders via m.parts. A plain text stream here is
+  // silently unparseable by useChat — the original "send, no response, no error".
+  return result.toUIMessageStreamResponse();
 }
