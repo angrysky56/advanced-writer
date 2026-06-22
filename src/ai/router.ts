@@ -1,7 +1,7 @@
-import { ENV } from '../config.js';
-import { ollamaClient } from './ollama.js';
-import { openRouterClient } from './openrouter.js';
-import { TaskType } from '../types/workflow.js';
+import { ENV } from "../config.js";
+import { ollamaClient } from "./ollama.js";
+import { openRouterClient } from "./openrouter.js";
+import { TaskType } from "../types/workflow.js";
 
 interface CompletionRequest {
   taskType: TaskType;
@@ -11,20 +11,41 @@ interface CompletionRequest {
 }
 
 export class AIRouter {
-  private getConfigForTask(taskType: TaskType): { provider: string, model: string } {
-    let modelString = '';
-    switch (taskType) {
-      case 'generation': modelString = ENV.MODEL_GENERATION; break;
-      case 'diagnostic': modelString = ENV.MODEL_DIAGNOSTIC; break;
-      case 'embedding': modelString = ENV.MODEL_EMBEDDING; break;
-      case 'brainstorm': modelString = ENV.MODEL_BRAINSTORM; break;
-      default: throw new Error(`Unknown task type: ${taskType}`);
+  private overrides: Partial<Record<TaskType, string>> = {};
+
+  setOverrides(overrides: Partial<Record<TaskType, string>>) {
+    this.overrides = { ...this.overrides, ...overrides };
+  }
+
+  private getConfigForTask(taskType: TaskType): {
+    provider: string;
+    model: string;
+  } {
+    let modelString = this.overrides[taskType] || "";
+
+    if (!modelString) {
+      switch (taskType) {
+        case "generation":
+          modelString = ENV.MODEL_GENERATION;
+          break;
+        case "diagnostic":
+          modelString = ENV.MODEL_DIAGNOSTIC;
+          break;
+        case "embedding":
+          modelString = ENV.MODEL_EMBEDDING;
+          break;
+        case "brainstorm":
+          modelString = ENV.MODEL_BRAINSTORM;
+          break;
+        default:
+          throw new Error(`Unknown task type: ${taskType}`);
+      }
     }
 
-    const parts = modelString.split('/');
+    const parts = modelString.split("/");
     const provider = parts[0];
-    const model = parts.slice(1).join('/');
-    
+    const model = parts.slice(1).join("/");
+
     return { provider, model };
   }
 
@@ -32,19 +53,29 @@ export class AIRouter {
     const { provider, model } = this.getConfigForTask(request.taskType);
     const temperature = request.temperature ?? 0.8;
 
-    if (provider === 'ollama') {
-      return ollamaClient.generateCompletion(model, request.systemPrompt, request.userMessage, temperature);
-    } else if (provider === 'openrouter') {
-      return openRouterClient.generateCompletion(model, request.systemPrompt, request.userMessage, temperature);
+    if (provider === "ollama") {
+      return ollamaClient.generateCompletion(
+        model,
+        request.systemPrompt,
+        request.userMessage,
+        temperature,
+      );
+    } else if (provider === "openrouter") {
+      return openRouterClient.generateCompletion(
+        model,
+        request.systemPrompt,
+        request.userMessage,
+        temperature,
+      );
     } else {
       throw new Error(`Unsupported AI provider: ${provider}`);
     }
   }
 
   async getEmbeddings(text: string): Promise<number[]> {
-    const { provider, model } = this.getConfigForTask('embedding');
-    if (provider !== 'ollama') {
-      throw new Error('Embeddings currently only supported via Ollama locally');
+    const { provider, model } = this.getConfigForTask("embedding");
+    if (provider !== "ollama") {
+      throw new Error("Embeddings currently only supported via Ollama locally");
     }
     return ollamaClient.getEmbeddings(model, text);
   }

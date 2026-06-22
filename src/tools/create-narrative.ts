@@ -40,17 +40,23 @@ export const createNarrativeDef = {
         items: { type: "string" },
         description: "Pull characters from the library",
       },
+      story_name: {
+        type: "string",
+        description: "Identifier for the story to save under",
+      },
     },
   },
 };
 
 export async function executeCreateNarrative(args: any) {
-  const { logline, genre, tone } = args;
-  const storyName = logline
-    .split(" ")
-    .slice(0, 4)
-    .join("_")
-    .replace(/[^a-zA-Z0-9_]/g, "");
+  const { logline, genre, tone, story_name } = args;
+  const storyName =
+    story_name ||
+    logline
+      .split(" ")
+      .slice(0, 4)
+      .join("_")
+      .replace(/[^a-zA-Z0-9_]/g, "");
 
   try {
     // 1. Architecture

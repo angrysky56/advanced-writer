@@ -131,8 +131,14 @@ const MOCK_STORIES: Story[] = [
 ];
 
 export default function ChatPage() {
-  const [selectedModel, setSelectedModel] = useState<string>("default");
-  const [customOllamaModel, setCustomOllamaModel] = useState<string>("");
+  const [modelGen, setModelGen] = useState<string>("default");
+  const [modelDiag, setModelDiag] = useState<string>("default");
+  const [modelBrain, setModelBrain] = useState<string>("default");
+  const [modelEmbed, setModelEmbed] = useState<string>("default");
+  const [modelDefaults, setModelDefaults] = useState<any>({});
+  const [openrouterModels, setOpenrouterModels] = useState<any[]>([]);
+  const [ollamaModels, setOllamaModels] = useState<any[]>([]);
+  const [showModelConfig, setShowModelConfig] = useState<boolean>(false);
 
   const { messages, sendMessage, status } = useChat();
   const [input, setInput] = useState("");
@@ -235,6 +241,14 @@ export default function ChatPage() {
 
   useEffect(() => {
     fetchWorkspace();
+    fetch("/api/models")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.openrouter) setOpenrouterModels(data.openrouter);
+        if (data.ollama) setOllamaModels(data.ollama);
+        if (data.defaults) setModelDefaults(data.defaults);
+      })
+      .catch((err) => console.error("Failed to load models", err));
   }, []);
 
   // Automatically re-fetch workspace when a tool completes execution (isLoading changes from true to false)
@@ -271,10 +285,12 @@ export default function ChatPage() {
       { text: input },
       {
         body: {
-          model:
-            selectedModel === "ollama-custom"
-              ? `ollama/${customOllamaModel || "llama3.1:8b"}`
-              : selectedModel,
+          modelOverrides: {
+            generation: modelGen !== "default" ? modelGen : undefined,
+            diagnostic: modelDiag !== "default" ? modelDiag : undefined,
+            brainstorm: modelBrain !== "default" ? modelBrain : undefined,
+            embedding: modelEmbed !== "default" ? modelEmbed : undefined,
+          },
         },
       },
     );
@@ -287,10 +303,12 @@ export default function ChatPage() {
       { text },
       {
         body: {
-          model:
-            selectedModel === "ollama-custom"
-              ? `ollama/${customOllamaModel || "llama3.1:8b"}`
-              : selectedModel,
+          modelOverrides: {
+            generation: modelGen !== "default" ? modelGen : undefined,
+            diagnostic: modelDiag !== "default" ? modelDiag : undefined,
+            brainstorm: modelBrain !== "default" ? modelBrain : undefined,
+            embedding: modelEmbed !== "default" ? modelEmbed : undefined,
+          },
         },
       },
     );
@@ -355,6 +373,7 @@ export default function ChatPage() {
 - genre: "${toolFormState.genre || "cyberpunk"}"
 - tone: "${toolFormState.tone || "dark"}"
 - target_length: "${toolFormState.target_length || "short_story"}"
+- story_name: "${storyId}"
 - mode: "fast-auto"`;
         break;
       case "develop_character":
@@ -431,10 +450,12 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
       { text: prompt },
       {
         body: {
-          model:
-            selectedModel === "ollama-custom"
-              ? `ollama/${customOllamaModel || "llama3.1:8b"}`
-              : selectedModel,
+          modelOverrides: {
+            generation: modelGen !== "default" ? modelGen : undefined,
+            diagnostic: modelDiag !== "default" ? modelDiag : undefined,
+            brainstorm: modelBrain !== "default" ? modelBrain : undefined,
+            embedding: modelEmbed !== "default" ? modelEmbed : undefined,
+          },
         },
       },
     );
@@ -964,108 +985,29 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
             <span style={{ fontSize: "0.95rem", fontWeight: "600" }}>
               Pair-Writing Workspace
             </span>
-            <div
+            <button
+              onClick={() => setShowModelConfig(!showModelConfig)}
               style={{
+                background: showModelConfig
+                  ? "rgba(168, 85, 247, 0.2)"
+                  : "rgba(255, 255, 255, 0.04)",
+                border: showModelConfig
+                  ? "1px solid rgba(168, 85, 247, 0.4)"
+                  : "1px solid var(--border)",
+                borderRadius: "6px",
+                color: "#fff",
+                fontSize: "0.75rem",
+                padding: "4px 10px",
+                cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
-                gap: "6px",
+                gap: "4px",
                 marginTop: "2px",
+                transition: "all 0.2s",
               }}
             >
-              <span
-                style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}
-              >
-                Model:
-              </span>
-              <select
-                className="model-select-dropdown"
-                value={selectedModel}
-                onChange={(e) => {
-                  setSelectedModel(e.target.value);
-                  if (e.target.value !== "ollama-custom") {
-                    setCustomOllamaModel("");
-                  }
-                }}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "var(--accent-hover)",
-                  fontSize: "0.75rem",
-                  fontWeight: "500",
-                  cursor: "pointer",
-                  outline: "none",
-                  padding: "0",
-                  margin: "0",
-                }}
-              >
-                <option
-                  value="default"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  Default (Env)
-                </option>
-                <option
-                  value="openrouter/deepseek/deepseek-v4-pro"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  DeepSeek v4 Pro (OpenRouter)
-                </option>
-                <option
-                  value="openrouter/deepseek/deepseek-v4-flash"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  DeepSeek v4 Flash (OpenRouter)
-                </option>
-                <option
-                  value="openrouter/anthropic/claude-3.7-sonnet"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  Claude 3.7 Sonnet (OpenRouter)
-                </option>
-                <option
-                  value="openrouter/anthropic/claude-3.5-sonnet"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  Claude 3.5 Sonnet (OpenRouter)
-                </option>
-                <option
-                  value="openrouter/google/gemini-2.5-pro"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  Gemini 2.5 Pro (OpenRouter)
-                </option>
-                <option
-                  value="openrouter/google/gemini-2.5-flash"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  Gemini 2.5 Flash (OpenRouter)
-                </option>
-                <option
-                  value="ollama-custom"
-                  style={{ background: "#1f1f2e", color: "#fff" }}
-                >
-                  Ollama (Local Custom)...
-                </option>
-              </select>
-              {selectedModel === "ollama-custom" && (
-                <input
-                  type="text"
-                  placeholder="e.g. llama3.1:8b"
-                  value={customOllamaModel}
-                  onChange={(e) => setCustomOllamaModel(e.target.value)}
-                  style={{
-                    background: "rgba(255,255,255,0.05)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "4px",
-                    color: "#fff",
-                    fontSize: "0.7rem",
-                    padding: "2px 6px",
-                    width: "100px",
-                    outline: "none",
-                  }}
-                />
-              )}
-            </div>
+              ⚙️ Configure Models
+            </button>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <span
@@ -1100,6 +1042,171 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
             </button>
           </div>
         </div>
+
+        {showModelConfig && (
+          <div
+            style={{
+              background: "rgba(22, 22, 34, 0.9)",
+              backdropFilter: "blur(12px)",
+              borderBottom: "1px solid var(--border)",
+              padding: "16px",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "16px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+              animation: "fadeIn 0.2s ease-out",
+            }}
+          >
+            {/* Creative Generation */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", fontWeight: "600" }}>
+                Creative Generation Model
+              </label>
+              <select
+                value={modelGen}
+                onChange={(e) => setModelGen(e.target.value)}
+                style={{
+                  background: "rgba(0,0,0,0.25)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  color: "#fff",
+                  fontSize: "0.75rem",
+                  padding: "6px 8px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="default" style={{ background: "#1f1f2e" }}>
+                  Default ({modelDefaults.generation?.split("/").slice(1).join("/") || "Env Default"})
+                </option>
+                {openrouterModels.length > 0 && (
+                  <optgroup label="OpenRouter Models" style={{ background: "#1f1f2e" }}>
+                    {openrouterModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name.replace("openrouter/", "")}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {ollamaModels.length > 0 && (
+                  <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
+                    {ollamaModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+
+            {/* Diagnostic Scoring */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", fontWeight: "600" }}>
+                Diagnostic Scoring Model
+              </label>
+              <select
+                value={modelDiag}
+                onChange={(e) => setModelDiag(e.target.value)}
+                style={{
+                  background: "rgba(0,0,0,0.25)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  color: "#fff",
+                  fontSize: "0.75rem",
+                  padding: "6px 8px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="default" style={{ background: "#1f1f2e" }}>
+                  Default ({modelDefaults.diagnostic?.split("/").slice(1).join("/") || "Env Default"})
+                </option>
+                {openrouterModels.length > 0 && (
+                  <optgroup label="OpenRouter Models" style={{ background: "#1f1f2e" }}>
+                    {openrouterModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name.replace("openrouter/", "")}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {ollamaModels.length > 0 && (
+                  <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
+                    {ollamaModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+
+            {/* Brainstorming */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", fontWeight: "600" }}>
+                Brainstorming Model
+              </label>
+              <select
+                value={modelBrain}
+                onChange={(e) => setModelBrain(e.target.value)}
+                style={{
+                  background: "rgba(0,0,0,0.25)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  color: "#fff",
+                  fontSize: "0.75rem",
+                  padding: "6px 8px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="default" style={{ background: "#1f1f2e" }}>
+                  Default ({modelDefaults.brainstorm?.split("/").slice(1).join("/") || "Env Default"})
+                </option>
+                {openrouterModels.length > 0 && (
+                  <optgroup label="OpenRouter Models" style={{ background: "#1f1f2e" }}>
+                    {openrouterModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name.replace("openrouter/", "")}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {ollamaModels.length > 0 && (
+                  <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
+                    {ollamaModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+
+            {/* Vector Embedding */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", fontWeight: "600" }}>
+                Vector Embedding Model
+              </label>
+              <select
+                value={modelEmbed}
+                onChange={(e) => setModelEmbed(e.target.value)}
+                style={{
+                  background: "rgba(0,0,0,0.25)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  color: "#fff",
+                  fontSize: "0.75rem",
+                  padding: "6px 8px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="default" style={{ background: "#1f1f2e" }}>
+                  Default ({modelDefaults.embedding?.split("/").slice(1).join("/") || "Env Default"})
+                </option>
+                {ollamaModels.length > 0 && (
+                  <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
+                    {ollamaModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          </div>
+        )}
 
         <div className="messages-container">
           {messages.length === 0 ? (

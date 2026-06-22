@@ -17,18 +17,24 @@ import { executeStoryscopeFinalReview } from "../../../src/tools/storyscope-revi
 import { executeApplyStoryscopeRevisions } from "../../../src/tools/apply-storyscope-revisions";
 import { executeWebSearch } from "../../../src/tools/web-search";
 import { workspaceExporter } from "../../../src/storage/workspace";
+import { aiRouter } from "../../../src/ai/router";
 
 // Allow streaming responses up to 5 minutes
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  const { messages, model: requestModel } = await req.json();
+  const { messages, model: requestModel, modelOverrides } = await req.json();
+
+  if (modelOverrides) {
+    aiRouter.setOverrides(modelOverrides);
+  }
 
   // Resolve model string (e.g. "openrouter/deepseek/deepseek-v4-pro" or "default")
   const modelString =
-    requestModel && requestModel !== "default"
+    modelOverrides?.generation ||
+    (requestModel && requestModel !== "default"
       ? requestModel
-      : process.env.MODEL_GENERATION || "openrouter/deepseek/deepseek-v4-pro";
+      : process.env.MODEL_GENERATION || "openrouter/deepseek/deepseek-v4-pro");
 
   // Determine provider and model ID
   const slashIndex = modelString.indexOf("/");
@@ -126,6 +132,10 @@ export async function POST(req: Request) {
               .array(z.string())
               .optional()
               .describe("Pull characters from the library"),
+            story_name: z
+              .string()
+              .optional()
+              .describe("Identifier for the story to save under"),
           }),
         ),
         execute: async (args) => {
