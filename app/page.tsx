@@ -1264,6 +1264,22 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
             </button>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <a
+              href="/studio"
+              style={{
+                background: "rgba(168, 85, 247, 0.12)",
+                color: "var(--accent-hover)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                borderRadius: "6px",
+                fontSize: "0.8rem",
+                padding: "6px 12px",
+                cursor: "pointer",
+                fontWeight: "600",
+                textDecoration: "none",
+              }}
+            >
+              ◆ Open Studio
+            </a>
             <span
               className="char-archetype"
               style={{

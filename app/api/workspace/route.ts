@@ -161,8 +161,11 @@ function getCleanSummary(content: string): string {
   return "No summary description available.";
 }
 
-export async function GET() {
+export async function GET(req?: Request) {
   try {
+    const version = req
+      ? new URL(req.url).searchParams.get("version") || "v1"
+      : "v1";
     const baseDir = getWorkspaceDir();
     if (!fs.existsSync(baseDir)) {
       return NextResponse.json({
@@ -289,9 +292,18 @@ export async function GET() {
         worldBible = await fs.promises.readFile(biblePath, "utf8");
       }
 
-      // 5. Read drafts/v1 (scenes/chapters)
+      // 5. Read drafts for the requested version, and list available versions.
+      let availableVersions: string[] = [];
+      const draftsRoot = path.join(storyPath, "drafts");
+      if (fs.existsSync(draftsRoot)) {
+        availableVersions = (await fs.promises.readdir(draftsRoot))
+          .filter((v) => /^v\d+$/i.test(v))
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      }
+      if (availableVersions.length === 0) availableVersions = ["v1"];
+
       const drafts: Draft[] = [];
-      const draftsDir = path.join(storyPath, "drafts", "v1");
+      const draftsDir = path.join(storyPath, "drafts", version);
       if (fs.existsSync(draftsDir)) {
         const draftFiles = await fs.promises.readdir(draftsDir);
         draftFiles.sort((a, b) =>
@@ -343,7 +355,7 @@ export async function GET() {
       const manuscriptPath = path.join(
         storyPath,
         "manuscript",
-        "v1",
+        version,
         "final_manuscript.md",
       );
       if (fs.existsSync(manuscriptPath)) {
@@ -353,6 +365,8 @@ export async function GET() {
       stories.push({
         id: dirName,
         name: storyName,
+        version,
+        availableVersions,
         characters,
         diagnostics,
         architectureBrief,
