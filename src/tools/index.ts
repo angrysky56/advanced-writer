@@ -36,6 +36,26 @@ import {
   applyStoryscopeRevisionsDef,
   executeApplyStoryscopeRevisions,
 } from "./apply-storyscope-revisions.js";
+import { startJob, getJob, listJobs } from "../jobs.js";
+
+export const checkJobDef = {
+  name: "check_job",
+  description:
+    "Check the status/result of a background job started by running a long tool with async=true. Returns running | completed | failed plus the final summary.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      job_id: { type: "string", description: "The id returned when the job started" },
+    },
+    required: ["job_id"],
+  },
+};
+
+export const listJobsDef = {
+  name: "list_jobs",
+  description: "List recent background jobs (most recent first) with their status.",
+  inputSchema: { type: "object", properties: {} },
+};
 
 export const ALL_TOOLS = [
   createNarrativeDef,
@@ -49,9 +69,64 @@ export const ALL_TOOLS = [
   expandToNovelDef,
   storyscopeFinalReviewDef,
   applyStoryscopeRevisionsDef,
+  checkJobDef,
+  listJobsDef,
 ];
 
+// Tools whose work can take minutes-to-hours. When called with async=true they
+// run detached and return a job id immediately instead of blocking the client.
+const ASYNC_CAPABLE = new Set([
+  "create_narrative",
+  "continue_narrative",
+  "batch_revise_pathologies",
+  "expand_to_novel",
+  "storyscope_final_review",
+  "apply_storyscope_revisions",
+]);
+
 export async function executeTool(name: string, args: any) {
+  // Background mode: fire-and-forget for long tools.
+  if (args && args.async === true && ASYNC_CAPABLE.has(name)) {
+    const { async: _async, ...rest } = args;
+    const rec = startJob(name, rest, () => dispatch(name, rest));
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Started '${name}' as background job ${rec.id}. It will keep running after this call returns. Poll with check_job {"job_id":"${rec.id}"}, or watch the workspace files appear.`,
+        },
+      ],
+    };
+  }
+
+  if (name === "check_job") {
+    const rec = getJob(args?.job_id);
+    if (!rec) {
+      return {
+        content: [
+          { type: "text", text: `No job found with id '${args?.job_id}'.` },
+        ],
+        isError: true,
+      };
+    }
+    return { content: [{ type: "text", text: JSON.stringify(rec, null, 2) }] };
+  }
+
+  if (name === "list_jobs") {
+    const jobs = listJobs();
+    if (jobs.length === 0)
+      return { content: [{ type: "text", text: "No background jobs yet." }] };
+    const lines = jobs.map(
+      (j) =>
+        `- ${j.id} ${j.tool} → ${j.status}${j.finishedAt ? ` (done ${j.finishedAt})` : ` (started ${j.startedAt})`}`,
+    );
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+
+  return dispatch(name, args);
+}
+
+async function dispatch(name: string, args: any) {
   switch (name) {
     case "create_narrative":
       return executeCreateNarrative(args);

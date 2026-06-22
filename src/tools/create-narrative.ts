@@ -44,6 +44,12 @@ export const createNarrativeDef = {
         type: "string",
         description: "Identifier for the story to save under",
       },
+      async: {
+        type: "boolean",
+        description:
+          "Run in the background and return a job id immediately (recommended for fast-auto / long runs). Poll with check_job.",
+        default: false,
+      },
     },
     required: ["logline"],
   },

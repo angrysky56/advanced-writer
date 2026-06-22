@@ -28,6 +28,12 @@ export const batchRevisePathologiesDef = {
         description: "Draft version to revise and recompile (e.g. 'v1')",
         default: "v1",
       },
+      async: {
+        type: "boolean",
+        description:
+          "Run in the background and return a job id immediately (recommended). Poll with check_job.",
+        default: false,
+      },
     },
     required: ["story_id"],
   },

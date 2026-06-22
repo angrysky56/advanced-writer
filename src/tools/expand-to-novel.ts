@@ -32,6 +32,12 @@ export const expandToNovelDef = {
         description: "The version tag for the draft (e.g., 'v2')",
         default: "v1",
       },
+      async: {
+        type: "boolean",
+        description:
+          "Run in the background and return a job id immediately (strongly recommended when auto_draft=true). Poll with check_job.",
+        default: false,
+      },
     },
     required: ["story_id", "synopsis", "target_length"],
   },

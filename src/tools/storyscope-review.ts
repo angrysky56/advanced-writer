@@ -20,6 +20,12 @@ export const storyscopeFinalReviewDef = {
         description:
           "The story to review. Must have a compiled final_manuscript.md.",
       },
+      async: {
+        type: "boolean",
+        description:
+          "Run in the background and return a job id immediately (recommended — dispatches many lenses). Poll with check_job.",
+        default: false,
+      },
     },
     required: ["story_id"],
   },

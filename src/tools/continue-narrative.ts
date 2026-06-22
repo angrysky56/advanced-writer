@@ -29,6 +29,12 @@ export const continueNarrativeDef = {
         description:
           "Optional feedback or direction for where the story should go next",
       },
+      async: {
+        type: "boolean",
+        description:
+          "Run in the background and return a job id immediately. Poll with check_job.",
+        default: false,
+      },
     },
     required: ["story_id", "previous_scene_id", "next_scene_id"],
   },

@@ -19,6 +19,12 @@ export const applyStoryscopeRevisionsDef = {
         description: "Draft version to write the rewrites to (default 'v2')",
         default: "v2",
       },
+      async: {
+        type: "boolean",
+        description:
+          "Run in the background and return a job id immediately (recommended — rewrites every scene). Poll with check_job.",
+        default: false,
+      },
     },
     required: ["story_id"],
   },

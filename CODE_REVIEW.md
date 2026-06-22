@@ -39,6 +39,8 @@ Reliability / correctness:
 
 Embedding model removed (M4): Chroma handles its own embeddings, so the unused `MODEL_EMBEDDING` config, the `embedding` TaskType, `getEmbeddings()` (router + ollama), the models-API default, and the UI's "Vector Embedding Model" selector were all deleted. One less moving part to misconfigure.
 
+Async / long-run support (new): the long tools (`create_narrative`, `continue_narrative`, `batch_revise_pathologies`, `expand_to_novel`, `storyscope_final_review`, `apply_storyscope_revisions`) now accept `async: true`. In that mode they start a detached background job and return a job id immediately — no client request can time out, and an hour-long run keeps going as long as the MCP host (the desktop app) stays open. Poll with the new `check_job {"job_id":"…"}` tool or `list_jobs`. Job records live in `<WORKSPACE_DIR>/_jobs/<id>.json`. Implemented in `src/jobs.ts` with a single chokepoint in `executeTool` (`src/tools/index.ts`); no per-tool rewrites.
+
 Not changed (by design / your call): no `max_tokens` anywhere (intentional); `cross_pollinate` action dropped rather than stubbed.
 
 ---
