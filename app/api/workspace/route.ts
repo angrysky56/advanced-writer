@@ -367,7 +367,25 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { path: newPath } = await req.json();
+    const { path: newPath, action, projectName } = await req.json();
+
+    if (action === "createProject") {
+      if (!projectName) {
+        return NextResponse.json({ error: "Project name is required." }, { status: 400 });
+      }
+      const baseDir = getWorkspaceDir();
+      const folderName = projectName.trim().replace(/\s+/g, "_").toLowerCase();
+      const newProjectPath = path.join(baseDir, folderName);
+      if (!fs.existsSync(newProjectPath)) {
+        await fs.promises.mkdir(newProjectPath, { recursive: true });
+        await fs.promises.mkdir(path.join(newProjectPath, "characters"), { recursive: true });
+        await fs.promises.mkdir(path.join(newProjectPath, "structure"), { recursive: true });
+        await fs.promises.mkdir(path.join(newProjectPath, "drafts", "v1"), { recursive: true });
+        await fs.promises.mkdir(path.join(newProjectPath, "diagnostics"), { recursive: true });
+      }
+      return GET();
+    }
+
     if (!newPath) {
       return NextResponse.json(
         { error: "Path parameter is required." },

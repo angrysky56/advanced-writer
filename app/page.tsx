@@ -203,6 +203,7 @@ export default function ChatPage() {
     expandTargetLength: "novel",
     expandAutoDraft: true,
     searchQuery: "",
+    projectName: "",
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -326,7 +327,24 @@ export default function ChatPage() {
     }
   };
 
-  const handleExecuteTool = () => {
+  const handleExecuteTool = async () => {
+    if (activeTool === "create_project") {
+      if (!toolFormState.projectName) return;
+      try {
+        await fetch("/api/workspace", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "createProject", projectName: toolFormState.projectName }),
+        });
+        await fetchWorkspace();
+        setIsToolChestOpen(false);
+        updateFormState("projectName", "");
+      } catch (err) {
+        console.error("Failed to create project", err);
+      }
+      return;
+    }
+
     let prompt = "";
     const storyId = activeStory?.id || "default_story";
 
@@ -1278,6 +1296,12 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
               {/* Tool list sidebar */}
               <div className="tool-list-sidebar">
                 <div
+                  className={`tool-list-item ${activeTool === "create_project" ? "active" : ""}`}
+                  onClick={() => setActiveTool("create_project")}
+                >
+                  Create Project
+                </div>
+                <div
                   className={`tool-list-item ${activeTool === "create_narrative" ? "active" : ""}`}
                   onClick={() => setActiveTool("create_narrative")}
                 >
@@ -1353,6 +1377,26 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
 
               {/* Tool Parameters Form */}
               <div className="tool-form-area">
+                {activeTool === "create_project" && (
+                  <>
+                    <span className="tool-form-title">Create New Project</span>
+                    <span className="tool-form-desc">
+                      Create a new empty story project directory in the current workspace.
+                    </span>
+                    <div className="tool-form-grid">
+                      <div className="tool-input-group" style={{ gridColumn: "1 / -1" }}>
+                        <label className="tool-input-label">Project Name</label>
+                        <input
+                          className="tool-form-input"
+                          value={toolFormState.projectName || ""}
+                          onChange={(e) => updateFormState("projectName", e.target.value)}
+                          placeholder="e.g. Neon Gods"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 {activeTool === "create_narrative" && (
                   <>
                     <span className="tool-form-title">
