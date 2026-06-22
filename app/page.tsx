@@ -163,8 +163,9 @@ export default function ChatPage() {
     "characters" | "architecture" | "chapters" | "bible"
   >("characters");
   const [rightTab, setRightTab] = useState<
-    "pacing" | "diagnostics" | "storyscope"
+    "pacing" | "diagnostics" | "storyscope" | "arc"
   >("pacing");
+  const [arcData, setArcData] = useState<any[]>([]);
 
   // Popover Drawer / Modal States
   const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null);
@@ -300,6 +301,18 @@ export default function ChatPage() {
   }, [messages]);
 
   const activeStory = stories.find((s) => s.id === activeStoryId) || stories[0];
+
+  // Load the per-character affect arc (Neo4j affect_log) for the active story.
+  useEffect(() => {
+    if (!activeStory?.id) {
+      setArcData([]);
+      return;
+    }
+    fetch(`/api/arc?story_id=${encodeURIComponent(activeStory.id)}`)
+      .then((r) => r.json())
+      .then((d) => setArcData(Array.isArray(d.characters) ? d.characters : []))
+      .catch(() => setArcData([]));
+  }, [activeStory?.id, rightTab]);
 
   // Set default selected character when active story changes
   useEffect(() => {
@@ -596,6 +609,166 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
         <br key={idx} />
       );
     });
+  };
+
+  // Render per-character emotional arc (Plutchik over scenes) from affect_log.
+  const PLUTCHIK_COLORS: Record<string, string> = {
+    joy: "#f5c518",
+    trust: "#7cd992",
+    fear: "#2e9e5b",
+    surprise: "#5bc0eb",
+    sadness: "#4a6fdc",
+    disgust: "#9b59b6",
+    anger: "#e74c3c",
+    anticipation: "#f39c12",
+  };
+  const renderAffectArc = () => {
+    if (!arcData || arcData.length === 0) {
+      return (
+        <div
+          style={{
+            padding: "40px 16px",
+            textAlign: "center",
+            color: "rgba(255,255,255,0.3)",
+            fontSize: "0.8rem",
+          }}
+        >
+          No affect-arc data yet. Draft scenes with continue_narrative (or
+          fast-auto) — each scene records the cast's Plutchik + Panksepp readings
+          to the graph, and they appear here as a trajectory.
+        </div>
+      );
+    }
+    const emotions = Object.keys(PLUTCHIK_COLORS);
+    const width = 320;
+    const height = 130;
+    const padding = 22;
+
+    return (
+      <div>
+        {arcData.map((char: any, ci: number) => {
+          const snaps = Array.isArray(char.snapshots) ? char.snapshots : [];
+          const n = snaps.length;
+          const stepX = (width - padding * 2) / Math.max(n - 1, 1);
+          const yOf = (v: number) =>
+            height - padding - ((v - 1) / 9) * (height - padding * 2);
+          return (
+            <div key={ci} style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                {char.name}{" "}
+                <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>
+                  ({char.role || "—"})
+                </span>
+              </div>
+              {n === 0 ? (
+                <div
+                  style={{
+                    fontSize: "0.72rem",
+                    color: "rgba(255,255,255,0.35)",
+                    padding: "6px 0",
+                  }}
+                >
+                  No scenes tracked yet (appears once they act in a drafted
+                  scene).
+                </div>
+              ) : (
+                <>
+                  <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%" }}>
+                    {[1, 5.5, 10].map((g, gi) => (
+                      <line
+                        key={gi}
+                        x1={padding}
+                        x2={width - padding}
+                        y1={yOf(g)}
+                        y2={yOf(g)}
+                        stroke="rgba(255,255,255,0.06)"
+                      />
+                    ))}
+                    {emotions.map((emo) => {
+                      let path = "";
+                      const circles: { x: number; y: number }[] = [];
+                      snaps.forEach((s: any, i: number) => {
+                        const v =
+                          s.plutchik && typeof s.plutchik[emo] === "number"
+                            ? s.plutchik[emo]
+                            : null;
+                        if (v == null) return;
+                        const x = padding + i * stepX;
+                        const y = yOf(v);
+                        path += path === "" ? `M ${x} ${y}` : ` L ${x} ${y}`;
+                        circles.push({ x, y });
+                      });
+                      return (
+                        <g key={emo}>
+                          {path && (
+                            <path
+                              d={path}
+                              fill="none"
+                              stroke={PLUTCHIK_COLORS[emo]}
+                              strokeWidth="1.6"
+                              opacity="0.85"
+                            />
+                          )}
+                          {circles.map((c, idx) => (
+                            <circle
+                              key={idx}
+                              cx={c.x}
+                              cy={c.y}
+                              r="2"
+                              fill={PLUTCHIK_COLORS[emo]}
+                            />
+                          ))}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "6px",
+                      fontSize: "0.6rem",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {emotions.map((emo) => (
+                      <span
+                        key={emo}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "3px",
+                          color: "rgba(255,255,255,0.6)",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "2px",
+                            background: PLUTCHIK_COLORS[emo],
+                          }}
+                        ></span>
+                        {emo}
+                      </span>
+                    ))}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.6rem",
+                      color: "rgba(255,255,255,0.35)",
+                      marginTop: "3px",
+                    }}
+                  >
+                    scenes: {snaps.map((s: any) => s.scene).join(" → ")}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   // Render Pacing Chart SVG
@@ -2451,6 +2624,13 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
           >
             StoryScope Audits
           </button>
+          <button
+            className={`tab-btn ${rightTab === "arc" ? "active" : ""}`}
+            onClick={() => setRightTab("arc")}
+            style={{ fontSize: "0.75rem", padding: "8px 4px" }}
+          >
+            Affect Arc
+          </button>
         </div>
 
         {rightTab === "pacing" ? (
@@ -2522,7 +2702,7 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
               )}
             </div>
           </div>
-        ) : (
+        ) : rightTab === "storyscope" ? (
           /* STORYSCOPE AUDIT LENSES */
           <div className="storyscope-container">
             <div className="section-title" style={{ padding: "0" }}>
@@ -2607,6 +2787,14 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                 </button>
               </div>
             )}
+          </div>
+        ) : (
+          /* AFFECT ARC — per-scene Plutchik trajectory from the graph */
+          <div style={{ padding: "0 16px" }}>
+            <div className="section-title" style={{ padding: "0 0 8px 0" }}>
+              Emotional Arc — Plutchik per scene
+            </div>
+            {renderAffectArc()}
           </div>
         )}
       </aside>
