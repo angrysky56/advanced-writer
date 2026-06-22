@@ -53,6 +53,76 @@ export const PLUTCHIK_EMOTIONS = [
   "anticipation",
 ] as const;
 
+/** Opposed pairs on the wheel — both elevated at once = genuine ambivalence. */
+export const PLUTCHIK_OPPOSITES: [string, string][] = [
+  ["joy", "sadness"],
+  ["trust", "disgust"],
+  ["fear", "anger"],
+  ["anticipation", "surprise"],
+];
+
+/** Primary dyads — adjacent emotions combine into a compound feeling. */
+export const PLUTCHIK_DYADS: Record<string, [string, string]> = {
+  love: ["joy", "trust"],
+  submission: ["trust", "fear"],
+  awe: ["fear", "surprise"],
+  disapproval: ["surprise", "sadness"],
+  remorse: ["sadness", "disgust"],
+  contempt: ["disgust", "anger"],
+  aggressiveness: ["anger", "anticipation"],
+  optimism: ["anticipation", "joy"],
+};
+
+/** Three intensity tiers per primary emotion (low / mid / high on the wheel). */
+export const PLUTCHIK_INTENSITY: Record<string, [string, string, string]> = {
+  joy: ["serenity", "joy", "ecstasy"],
+  trust: ["acceptance", "trust", "admiration"],
+  fear: ["apprehension", "fear", "terror"],
+  surprise: ["distraction", "surprise", "amazement"],
+  sadness: ["pensiveness", "sadness", "grief"],
+  disgust: ["boredom", "disgust", "loathing"],
+  anger: ["annoyance", "anger", "rage"],
+  anticipation: ["interest", "anticipation", "vigilance"],
+};
+
+/** Name the intensity tier of a primary emotion at a given 1-10 score. */
+export function intensityLabel(emotion: string, score: number): string {
+  const tiers = PLUTCHIK_INTENSITY[emotion];
+  if (!tiers) return emotion;
+  const s = clampScore(score);
+  return s <= 3 ? tiers[0] : s <= 7 ? tiers[1] : tiers[2];
+}
+
+/** Derive felt compound emotions: a dyad fires when BOTH constituents are high. */
+export function deriveDyads(
+  plutchik: Record<string, number>,
+  threshold = 6,
+): { name: string; strength: number }[] {
+  const out: { name: string; strength: number }[] = [];
+  for (const [name, [a, b]] of Object.entries(PLUTCHIK_DYADS)) {
+    const strength = Math.min(clampScore(plutchik[a]), clampScore(plutchik[b]));
+    if (strength >= threshold) out.push({ name, strength });
+  }
+  return out.sort((x, y) => y.strength - x.strength);
+}
+
+/** Opposed pairs both running high = internal conflict, not noise. */
+export function detectAmbivalence(
+  plutchik: Record<string, number>,
+  threshold = 6,
+): string[] {
+  const out: string[] = [];
+  for (const [a, b] of PLUTCHIK_OPPOSITES) {
+    if (
+      clampScore(plutchik[a]) >= threshold &&
+      clampScore(plutchik[b]) >= threshold
+    ) {
+      out.push(`${a} ↔ ${b}`);
+    }
+  }
+  return out;
+}
+
 export interface CharacterMeta {
   name: string;
   archetype: string;
@@ -86,11 +156,23 @@ export function formatAffectProfile(meta: CharacterMeta): string {
     (k) => `- ${k}: ${clampScore(p[k])}`,
   ).join("\n");
   const plutchikLines = PLUTCHIK_EMOTIONS.map(
-    (k) => `- ${k}: ${clampScore(e[k])}`,
+    (k) =>
+      `- ${k}: ${clampScore(e[k])} (${intensityLabel(k, clampScore(e[k]))})`,
   ).join("\n");
+
+  const dyads = deriveDyads(e);
+  const dyadLine =
+    dyads.length > 0
+      ? dyads.map((d) => `${d.name} (${d.strength})`).join(", ")
+      : "none pronounced";
+  const ambivalence = detectAmbivalence(e);
+  const ambLine = ambivalence.length > 0 ? ambivalence.join(", ") : "none";
+
   return (
     `## Affect Profile (Panksepp drives, 1-10)\n\nPrimary system: ${meta.panksepp_primary}\n\n${pankseppLines}\n\n` +
-    `## Emotional State (Plutchik, 1-10)\n\n${plutchikLines}\n`
+    `## Emotional State (Plutchik, 1-10)\n\n${plutchikLines}\n\n` +
+    `Compound emotions (dyads): ${dyadLine}\n` +
+    `Internal tension (opposed pairs): ${ambLine}\n`
   );
 }
 

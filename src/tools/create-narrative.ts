@@ -79,8 +79,24 @@ export async function executeCreateNarrative(args: any) {
       .replace(/[^a-zA-Z0-9_]/g, "");
 
   try {
-    // 1. Architecture
-    const archPrompt = `You are an expert story architect. Build a story architecture brief for a ${genre} story with a ${tone} tone.\nLogline: ${logline}`;
+    // 1. Cast FIRST, so character names are canonical and everything downstream
+    // (architecture, scene drafting) references the same actors — fixing the
+    // gap where the graph seeded one cast but the prose invented another.
+    const cast = await generateAndSeedCast(storyName, logline);
+    const castBrief = cast
+      .map(
+        (c) =>
+          `- ${c.meta.name} — ${c.meta.role}; archetype: ${c.meta.archetype}; hamartia: ${c.meta.hamartia}`,
+      )
+      .join("\n");
+
+    // 2. Architecture brief, referencing the established cast (keeps names
+    // consistent — no more "Elena" in the brief vs "Elara" in the prose).
+    const archPrompt = `You are an expert story architect. Build a story architecture brief for a ${genre} story with a ${tone} tone.
+Logline: ${logline}
+
+Use ONLY this established cast — do not rename them or invent new protagonists:
+${castBrief}`;
     const architecture = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt: archPrompt,
@@ -88,12 +104,13 @@ export async function executeCreateNarrative(args: any) {
     });
     await workspaceExporter.saveArchitectureBrief(storyName, architecture);
 
-    // 2. Character cast — generated with REAL names/traits and seeded into the
-    // graph so continuity updates (which match by name) actually land.
-    const cast = await generateAndSeedCast(storyName, logline);
+    // 3. Draft Scene 1 — using the canon cast by name.
+    const draftPrompt = `Write the opening scene for this story.
+Logline: ${logline}
+Tone: ${tone}
 
-    // 3. Draft Scene 1
-    const draftPrompt = `Write the opening scene for this story.\nLogline: ${logline}\nTone: ${tone}`;
+CANON CAST — use these characters by name; do NOT invent new named primary characters:
+${castBrief}`;
     const draft = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt: draftPrompt,

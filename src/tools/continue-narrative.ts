@@ -89,6 +89,16 @@ export async function executeContinueNarrative(args: any) {
     const storyState = await neo4jStorage.getStoryState(story_id);
     const graphStateContext = JSON.stringify(storyState, null, 2);
 
+    // Explicit canon cast list so the model keeps using the SEEDED characters
+    // (the ones the affect system tracks) instead of inventing fresh names.
+    const canonCast =
+      (storyState.characters || [])
+        .map(
+          (c: any) =>
+            `- ${c.name}${c.role ? ` (${c.role})` : ""}${c.archetype ? `, ${c.archetype}` : ""}`,
+        )
+        .join("\n") || "No cast on record yet.";
+
     const semanticScenes = await chromaStorage.searchScenes(
       user_direction || "next scene",
       2,
@@ -115,6 +125,9 @@ ${architecture}
 === WORLD BIBLE LORE ===
 ${worldLoreContext}
 
+=== CANON CAST (use ONLY these as named characters; do NOT introduce new named primary characters) ===
+${canonCast}
+
 === GRAPH DB STORY STATE (CHARACTERS, ENTITIES, RELATIONSHIPS) ===
 ${graphStateContext}
 
@@ -128,6 +141,7 @@ ${previousScene}
 ${user_direction || "Continue the narrative naturally, maintaining the tone, character voices, and momentum."}
 
 Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.
+Use ONLY the canon cast above for named characters — develop them, do not replace them with newly-invented primary characters.
 CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for AI dialogue or output. If CodeWhisper communicates in code, integrate it naturally into the prose (e.g., using italics or standard quotes). The final output must read like a traditional novel, not a GitHub README.`;
 
     const newDraft = await aiRouter.generateCompletion({
