@@ -1,5 +1,5 @@
 export type WorkflowMode = 'brainstorm' | 'collaborative' | 'fast-auto';
-export type TaskType = 'generation' | 'diagnostic' | 'embedding' | 'brainstorm';
+export type TaskType = 'generation' | 'diagnostic' | 'brainstorm';
 
 export interface WorkflowState {
   workflow: string;

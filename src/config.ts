@@ -13,7 +13,6 @@ const envSchema = z.object({
   OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
   MODEL_GENERATION: z.string(),
   MODEL_DIAGNOSTIC: z.string(),
-  MODEL_EMBEDDING: z.string(),
   MODEL_BRAINSTORM: z.string(),
   CHROMA_PERSIST_DIR: z.string().default('./data/chroma'),
   NEO4J_URI: z.string().default('bolt://localhost:7687'),

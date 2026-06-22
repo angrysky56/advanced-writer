@@ -27,11 +27,29 @@ export class OpenRouterClient {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.statusText}`);
+      // Surface the response body — it usually contains the real error
+      // (bad model slug, rate limit, etc.), which statusText alone hides.
+      let body = "";
+      try {
+        body = await response.text();
+      } catch {
+        /* ignore */
+      }
+      throw new Error(
+        `OpenRouter API error ${response.status} ${response.statusText}${body ? `: ${body.slice(0, 800)}` : ""}`,
+      );
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+    const message = data?.choices?.[0]?.message;
+    // Some reasoning models return content in `reasoning` with null `content`.
+    const content = message?.content ?? message?.reasoning ?? "";
+    if (!content) {
+      throw new Error(
+        `OpenRouter returned no content: ${JSON.stringify(data).slice(0, 800)}`,
+      );
+    }
+    return content;
   }
 }
 

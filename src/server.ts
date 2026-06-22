@@ -3,6 +3,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSche
 import { ALL_TOOLS, executeTool } from './tools/index.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const server = new Server(
   {
@@ -18,7 +21,10 @@ export const server = new Server(
   }
 );
 
-const SKILL_DIR = path.resolve(process.cwd(), 'skill');
+// Resolve relative to this module (project_root/skill) so the server works
+// regardless of the directory it is launched from. Works for both tsx (src/)
+// and the compiled build (dist/).
+const SKILL_DIR = path.resolve(__dirname, '../skill');
 const REFERENCES_DIR = path.join(SKILL_DIR, 'references');
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {

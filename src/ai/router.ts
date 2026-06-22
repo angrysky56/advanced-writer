@@ -31,9 +31,6 @@ export class AIRouter {
         case "diagnostic":
           modelString = ENV.MODEL_DIAGNOSTIC;
           break;
-        case "embedding":
-          modelString = ENV.MODEL_EMBEDDING;
-          break;
         case "brainstorm":
           modelString = ENV.MODEL_BRAINSTORM;
           break;
@@ -72,13 +69,6 @@ export class AIRouter {
     }
   }
 
-  async getEmbeddings(text: string): Promise<number[]> {
-    const { provider, model } = this.getConfigForTask("embedding");
-    if (provider !== "ollama") {
-      throw new Error("Embeddings currently only supported via Ollama locally");
-    }
-    return ollamaClient.getEmbeddings(model, text);
-  }
 }
 
 export const aiRouter = new AIRouter();

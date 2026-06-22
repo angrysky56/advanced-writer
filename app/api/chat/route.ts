@@ -19,8 +19,11 @@ import { executeWebSearch } from "../../../src/tools/web-search";
 import { workspaceExporter } from "../../../src/storage/workspace";
 import { aiRouter } from "../../../src/ai/router";
 
-// Allow streaming responses up to 5 minutes
-export const maxDuration = 300;
+// No time cap: novel-length runs can take an hour or more. This system is
+// designed to run long; do NOT reintroduce a maxDuration cap. (Self-hosted
+// Next has no hard enforcement; the high value documents intent and avoids the
+// short serverless default if ever deployed behind one.)
+export const maxDuration = 86400; // 24h
 
 export async function POST(req: Request) {
   const { messages, model: requestModel, modelOverrides } = await req.json();
@@ -99,7 +102,10 @@ export async function POST(req: Request) {
       "If the user asks for Draft 3, and Draft 2 exists, you should run storyscope_final_review on Draft 2, and then run apply_storyscope_revisions to generate Draft 3. " +
       "If they ask you to research something, use web_search. If they ask to expand a novel from scratch, use expand_to_novel. " +
       "You have access to 11 narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.",
-    stopWhen: stepCountIs(5),
+    // Effectively unlimited agent autonomy. A low cap here silently halts
+    // multi-step orchestration (e.g. drafting many scenes / multi-draft
+    // pipelines). High guard prevents only pathological infinite loops.
+    stopWhen: stepCountIs(100000),
     tools: {
       create_narrative: tool({
         description:
@@ -150,14 +156,7 @@ export async function POST(req: Request) {
         inputSchema: zodSchema(
           z.object({
             action: z
-              .enum([
-                "create",
-                "update",
-                "get",
-                "list",
-                "shadow_match",
-                "cross_pollinate",
-              ])
+              .enum(["create", "update", "get", "list", "shadow_match"])
               .describe("Action to perform"),
             character_id: z
               .string()

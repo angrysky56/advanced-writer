@@ -23,13 +23,18 @@ export const batchRevisePathologiesDef = {
         ],
         default: "screenplay",
       },
+      version: {
+        type: "string",
+        description: "Draft version to revise and recompile (e.g. 'v1')",
+        default: "v1",
+      },
     },
     required: ["story_id"],
   },
 };
 
 export async function executeBatchRevisePathologies(args: any) {
-  const { story_id, target_length = "screenplay" } = args;
+  const { story_id, target_length = "screenplay", version = "v1" } = args;
 
   try {
     const diagnostics = await workspaceExporter.readAllDiagnostics(story_id);
@@ -60,7 +65,11 @@ export async function executeBatchRevisePathologies(args: any) {
       });
 
       if (grade.trim().toUpperCase().includes("FAIL")) {
-        const draft = await workspaceExporter.readDraft(story_id, diag.sceneId);
+        const draft = await workspaceExporter.readDraft(
+          story_id,
+          diag.sceneId,
+          version,
+        );
         if (!draft) continue;
 
         // 2. The Character Writer's Room
@@ -107,29 +116,42 @@ Rewrite the scene now. Maintain formatting style.`;
           story_id,
           diag.sceneId,
           rewrittenDraft,
+          version,
         );
+
+        // Re-score the revised scene so its diagnostic report reflects the new
+        // text. Otherwise a later pass re-reads the OLD failing report and
+        // re-revises an already-fixed scene (draft/diagnostic desync).
+        const rescore = await aiRouter.generateCompletion({
+          taskType: "diagnostic",
+          systemPrompt: `Analyze the following revised scene for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\nScene:\n${rewrittenDraft}`,
+          userMessage: "Provide the updated neuro-critique report.",
+        });
+        await workspaceExporter.saveDiagnosticReport(
+          story_id,
+          diag.sceneId,
+          rescore,
+        );
+
         revisedCount++;
       }
     }
 
-    // 4. Recompile the final manuscript if any scenes were revised
+    // 4. Recompile the final manuscript if any scenes were revised.
     if (revisedCount > 0) {
-      const allDrafts = await workspaceExporter.readAllDrafts(story_id);
-      const compilerPrompt = `You are an expert editor and formatter. Compile, rewrite, and stitch the following drafted scenes into a polished, cohesive final manuscript formatted as a ${target_length}. Ensure the formatting matches industry standards for a ${target_length}.\n\n=== DRAFTS ===\n${allDrafts}`;
-
-      const finalManuscript = await aiRouter.generateCompletion({
-        taskType: "generation",
-        systemPrompt: compilerPrompt,
-        userMessage: "Compile the final manuscript.",
-      });
-
-      await workspaceExporter.saveManuscript(story_id, finalManuscript);
+      // Concatenate programmatically (no LLM "stitch" call) to avoid token
+      // truncation and content alteration on longer works.
+      const finalManuscript = await workspaceExporter.readAllDrafts(
+        story_id,
+        version,
+      );
+      await workspaceExporter.saveManuscript(story_id, finalManuscript, version);
 
       return {
         content: [
           {
             type: "text",
-            text: `Batch revise complete. ${revisedCount} scenes failed diagnostic and were debated by the characters, rewritten, and recompiled into a new final manuscript for ${story_id}.`,
+            text: `Batch revise complete. ${revisedCount} scenes failed diagnostic and were debated by the characters, rewritten, re-scored, and recompiled into a new ${target_length} manuscript for ${story_id}.`,
           },
         ],
       };

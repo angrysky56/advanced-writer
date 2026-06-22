@@ -1,8 +1,8 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
-import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
+import { generateAndSeedCast } from "./_cast.js";
 
 export const createNarrativeDef = {
   name: "create_narrative",
@@ -45,11 +45,25 @@ export const createNarrativeDef = {
         description: "Identifier for the story to save under",
       },
     },
+    required: ["logline"],
   },
 };
 
 export async function executeCreateNarrative(args: any) {
   const { logline, genre, tone, story_name } = args;
+
+  if (!logline || typeof logline !== "string") {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Error: 'logline' is required to create a narrative.",
+        },
+      ],
+      isError: true,
+    };
+  }
+
   const storyName =
     story_name ||
     logline
@@ -68,115 +82,9 @@ export async function executeCreateNarrative(args: any) {
     });
     await workspaceExporter.saveArchitectureBrief(storyName, architecture);
 
-    // 2. Character Cast Generation
-    // Generate Protagonist
-    const protagonistPrompt = `Based on this logline: ${logline}, generate a deeply flawed Jungian character profile for the Protagonist.
-Detail their core desires, archetype, hamartia (tragic flaw), shadow self, moral weakness, and Panksepp affect profile (e.g. SEEKING, FEAR, RAGE, PANIC, PLAY, CARE).`;
-    const protagonistContent = await aiRouter.generateCompletion({
-      taskType: "generation",
-      systemPrompt: protagonistPrompt,
-      userMessage: "Generate the protagonist character profile.",
-    });
-    await workspaceExporter.saveCharacterProfile(
-      storyName,
-      "protagonist",
-      protagonistContent,
-    );
-
-    // Save Protagonist to Neo4j
-    await neo4jStorage.createCharacterNode({
-      id: `${storyName}_protagonist`,
-      document: protagonistContent,
-      metadata: {
-        name: "Protagonist",
-        archetype: "The Hero",
-        hamartia: "Hubris",
-        shadow: "The Tyrant",
-        moral_weakness: "Selfishness",
-        individuation_state: "Pre-Awareness",
-        role: "Main",
-        panksepp_primary: "SEEKING",
-        story_ids: [storyName],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    });
-
-    // Generate Co-Star (Deuteragonist / Antagonist / Rival)
-    const costarPrompt = `Based on this logline: ${logline} and the Protagonist's profile below, generate a deeply flawed Jungian character profile for a Co-Star (either a foil, rival, or antagonist) who creates strong thematic tension.
-Detail their core desires, archetype, hamartia, shadow self, moral weakness, and relationship to the Protagonist.
-
-=== PROTAGONIST ===
-${protagonistContent}`;
-    const costarContent = await aiRouter.generateCompletion({
-      taskType: "generation",
-      systemPrompt: costarPrompt,
-      userMessage: "Generate the co-star character profile.",
-    });
-    await workspaceExporter.saveCharacterProfile(
-      storyName,
-      "co_star",
-      costarContent,
-    );
-
-    // Save Co-Star to Neo4j
-    await neo4jStorage.createCharacterNode({
-      id: `${storyName}_co_star`,
-      document: costarContent,
-      metadata: {
-        name: "Co-Star",
-        archetype: "The Shadow",
-        hamartia: "Obsession",
-        shadow: "The Destroyer",
-        moral_weakness: "Envy",
-        individuation_state: "Pre-Awareness",
-        role: "Co-Star",
-        panksepp_primary: "RAGE",
-        story_ids: [storyName],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    });
-
-    // Generate Supporting Character
-    const supportingPrompt = `Based on this logline: ${logline} and the existing cast below, generate a Jungian character profile for a Supporting Character (e.g. mentor, sidekick, or witness) who aids or complicates the narrative progression.
-Detail their core desires, archetype, hamartia, shadow self, and Panksepp profile.
-
-=== CAST ===
-Protagonist:
-${protagonistContent}
-
-Co-Star:
-${costarContent}`;
-    const supportingContent = await aiRouter.generateCompletion({
-      taskType: "generation",
-      systemPrompt: supportingPrompt,
-      userMessage: "Generate the supporting character profile.",
-    });
-    await workspaceExporter.saveCharacterProfile(
-      storyName,
-      "supporting",
-      supportingContent,
-    );
-
-    // Save Supporting Character to Neo4j
-    await neo4jStorage.createCharacterNode({
-      id: `${storyName}_supporting`,
-      document: supportingContent,
-      metadata: {
-        name: "Supporting",
-        archetype: "The Mentor",
-        hamartia: "Secret Grief",
-        shadow: "The Deceiver",
-        moral_weakness: "Cowardice",
-        individuation_state: "Aligned",
-        role: "Supporting",
-        panksepp_primary: "CARE",
-        story_ids: [storyName],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    });
+    // 2. Character cast — generated with REAL names/traits and seeded into the
+    // graph so continuity updates (which match by name) actually land.
+    const cast = await generateAndSeedCast(storyName, logline);
 
     // 3. Draft Scene 1
     const draftPrompt = `Write the opening scene for this story.\nLogline: ${logline}\nTone: ${tone}`;
@@ -223,31 +131,42 @@ ${costarContent}`;
       };
       const maxScenes = targetCounts[args.target_length] || 3;
 
+      let lastGood = 1;
       for (let i = 2; i <= maxScenes; i++) {
-        await executeContinueNarrative({
+        const res: any = await executeContinueNarrative({
           story_id: storyName,
           previous_scene_id: `scene_${i - 1}`,
           next_scene_id: `scene_${i}`,
           user_direction: `Continue drafting scene ${i} of ${maxScenes} for a ${args.target_length}.`,
         });
+        // Stop the chain on failure rather than silently producing orphaned
+        // or disconnected scenes downstream.
+        if (res?.isError) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `create_narrative stopped at scene_${i}: ${res.content?.[0]?.text || "scene generation failed"}. Scenes 1-${lastGood} were drafted for ${storyName}; rerun continue_narrative from scene_${lastGood} to resume.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        lastGood = i;
       }
 
-      const allDrafts = await workspaceExporter.readAllDrafts(storyName);
-      const compilerPrompt = `You are an expert editor and formatter. Compile, rewrite, and stitch the following drafted scenes into a polished, cohesive final manuscript formatted as a ${args.target_length}. Ensure the formatting matches industry standards for a ${args.target_length}.\n\n=== DRAFTS ===\n${allDrafts}`;
-
-      const finalManuscript = await aiRouter.generateCompletion({
-        taskType: "generation",
-        systemPrompt: compilerPrompt,
-        userMessage: "Compile the final manuscript.",
-      });
-
+      // Compile programmatically (no LLM "stitch" call) to avoid token
+      // truncation and content alteration on longer works.
+      const finalManuscript = await workspaceExporter.readAllDrafts(storyName);
       await workspaceExporter.saveManuscript(storyName, finalManuscript);
 
       return {
         content: [
           {
             type: "text",
-            text: `fast-auto workflow complete. Generated ${maxScenes} scenes and compiled final manuscript for ${storyName}.`,
+            text: `fast-auto workflow complete. Cast: ${cast
+              .map((c) => c.meta.name)
+              .join(", ")}. Generated ${maxScenes} scenes and compiled the final manuscript for ${storyName}.`,
           },
         ],
       };
@@ -257,7 +176,9 @@ ${costarContent}`;
       content: [
         {
           type: "text",
-          text: `create_narrative workflow (scene 1) completed successfully. Output saved to workspace under story: ${storyName}`,
+          text: `create_narrative workflow (scene 1) completed successfully. Cast: ${cast
+            .map((c) => `${c.meta.name} (${c.meta.role})`)
+            .join(", ")}. Output saved to workspace under story: ${storyName}`,
         },
       ],
     };

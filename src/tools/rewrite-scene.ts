@@ -1,5 +1,6 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
+import { safeParseJson } from "../ai/extract.js";
 
 export const rewriteSceneDef = {
   name: "rewrite_scene",
@@ -29,6 +30,38 @@ export const rewriteSceneDef = {
   },
 };
 
+interface AxisScores {
+  cortisol: number | null;
+  oxytocin: number | null;
+  dopamine: number | null;
+}
+
+/** Quick numeric scoring of the three neurochemical axes (1-10). */
+async function scoreAxes(text: string): Promise<AxisScores> {
+  try {
+    const raw = await aiRouter.generateCompletion({
+      taskType: "diagnostic",
+      systemPrompt:
+        'Score the narrative text on three axes from 1-10. Output ONLY JSON: {"cortisol": <n>, "oxytocin": <n>, "dopamine": <n>}.',
+      userMessage: text,
+      temperature: 0.1,
+    });
+    const parsed = safeParseJson<AxisScores>(raw);
+    return {
+      cortisol: parsed?.cortisol ?? null,
+      oxytocin: parsed?.oxytocin ?? null,
+      dopamine: parsed?.dopamine ?? null,
+    };
+  } catch {
+    return { cortisol: null, oxytocin: null, dopamine: null };
+  }
+}
+
+function fmt(s: AxisScores): string {
+  const v = (n: number | null) => (n === null ? "?" : String(n));
+  return `cortisol ${v(s.cortisol)} / oxytocin ${v(s.oxytocin)} / dopamine ${v(s.dopamine)}`;
+}
+
 export async function executeRewriteScene(args: any) {
   const {
     scene_text,
@@ -38,8 +71,11 @@ export async function executeRewriteScene(args: any) {
   } = args;
 
   try {
-    const rewritePrompt = `You are a masterful neurochemical editor. Rewrite the following scene to specifically enhance the ${target_axis} axis. Improve pacing, agency, and somatic metaphors.\n\nOriginal Scene:\n${scene_text}`;
+    // 1. Score BEFORE
+    const before = await scoreAxes(scene_text);
 
+    // 2. Rewrite
+    const rewritePrompt = `You are a masterful neurochemical editor. Rewrite the following scene to specifically enhance the ${target_axis} axis. Improve pacing, agency, and somatic metaphors.\n\nOriginal Scene:\n${scene_text}`;
     const rewrittenDraft = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt: rewritePrompt,
@@ -48,11 +84,26 @@ export async function executeRewriteScene(args: any) {
 
     await workspaceExporter.saveDraft(story_id, scene_id, rewrittenDraft);
 
+    // 3. Score AFTER and persist the updated diagnostic.
+    const after = await scoreAxes(rewrittenDraft);
+    await workspaceExporter.saveDiagnosticReport(
+      story_id,
+      scene_id,
+      `# Rewrite scoring (${scene_id})\n\nTarget axis: **${target_axis}**\n\n- Before: ${fmt(before)}\n- After: ${fmt(after)}\n`,
+    );
+
+    const beforeAxis = (before as any)[target_axis];
+    const afterAxis = (after as any)[target_axis];
+    const delta =
+      typeof beforeAxis === "number" && typeof afterAxis === "number"
+        ? ` (${target_axis} ${beforeAxis} → ${afterAxis})`
+        : "";
+
     return {
       content: [
         {
           type: "text",
-          text: `Scene successfully rewritten focusing on ${target_axis} and saved to workspace for story: ${story_id}, scene: ${scene_id}.`,
+          text: `Scene rewritten focusing on ${target_axis}${delta} and saved for story: ${story_id}, scene: ${scene_id}. Before: ${fmt(before)}. After: ${fmt(after)}.`,
         },
       ],
     };

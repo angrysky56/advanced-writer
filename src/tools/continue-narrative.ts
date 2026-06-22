@@ -2,6 +2,7 @@ import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
+import { safeParseJson } from "../ai/extract.js";
 
 export const continueNarrativeDef = {
   name: "continue_narrative",
@@ -46,12 +47,32 @@ export async function executeContinueNarrative(args: any) {
     const architecture =
       (await workspaceExporter.readArchitectureBrief(story_id)) ||
       "Architecture brief not found.";
+    const rawPrevious = await workspaceExporter.readDraft(
+      story_id,
+      previous_scene_id,
+      version,
+    );
+    const isFreshStart =
+      !previous_scene_id ||
+      ["none", "start", "n/a", "0"].includes(
+        String(previous_scene_id).toLowerCase(),
+      );
+    if (!rawPrevious && !isFreshStart) {
+      // Fail loud: generating from a missing predecessor produces disconnected
+      // scenes and breaks continuity for the rest of an auto-draft run.
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: previous scene '${previous_scene_id}' not found for story '${story_id}' (version ${version}). Refusing to generate a disconnected scene.`,
+          },
+        ],
+        isError: true,
+      };
+    }
     const previousScene =
-      (await workspaceExporter.readDraft(
-        story_id,
-        previous_scene_id,
-        version,
-      )) || "Previous scene not found.";
+      rawPrevious ||
+      "(This is the opening scene — there is no previous scene yet.)";
 
     // Initialize Chroma client if needed (it handles getOrCreate inside)
     await chromaStorage
@@ -68,7 +89,7 @@ export async function executeContinueNarrative(args: any) {
     );
     const plotContext =
       semanticScenes.length > 0
-        ? semanticScenes.join("\\n\\n---\\n\\n")
+        ? semanticScenes.join("\n\n---\n\n")
         : "No relevant past scenes found in Vector DB.";
 
     const semanticLore = await chromaStorage.searchLore(
@@ -77,7 +98,7 @@ export async function executeContinueNarrative(args: any) {
     );
     const worldLoreContext =
       semanticLore.length > 0
-        ? semanticLore.join("\\n\\n---\\n\\n")
+        ? semanticLore.join("\n\n---\n\n")
         : "No relevant world lore found.";
 
     const systemPrompt = `You are a masterful storyteller. Your task is to write the NEXT scene in this story.
@@ -159,44 +180,45 @@ ${newDraft}`;
     });
 
     try {
-      // Very basic JSON parse (assumes LLM followed strict JSON format)
-      const cleanJson = continuityExtraction
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-      const stateData = JSON.parse(cleanJson);
-
-      if (stateData.character_updates) {
-        for (const update of stateData.character_updates) {
-          await neo4jStorage.updateCharacterState(
-            story_id,
-            update.name,
-            update.arc_progression,
-          );
+      const stateData = safeParseJson<any>(continuityExtraction);
+      if (!stateData) {
+        console.warn("Continuity extraction returned no parseable JSON.");
+      } else {
+        if (Array.isArray(stateData.character_updates)) {
+          for (const update of stateData.character_updates) {
+            if (!update?.name) continue;
+            await neo4jStorage.updateCharacterState(
+              story_id,
+              update.name,
+              update.arc_progression || "",
+            );
+          }
         }
-      }
-      if (stateData.new_entities) {
-        for (const entity of stateData.new_entities) {
-          await neo4jStorage.addEntity(
-            story_id,
-            entity.name,
-            entity.type,
-            entity.description,
-          );
+        if (Array.isArray(stateData.new_entities)) {
+          for (const entity of stateData.new_entities) {
+            if (!entity?.name) continue;
+            await neo4jStorage.addEntity(
+              story_id,
+              entity.name,
+              entity.type || "Thing",
+              entity.description || "",
+            );
+          }
         }
-      }
-      if (stateData.new_relationships) {
-        for (const rel of stateData.new_relationships) {
-          await neo4jStorage.addEntityRelationship(
-            story_id,
-            rel.subject,
-            rel.object,
-            rel.relation,
-          );
+        if (Array.isArray(stateData.new_relationships)) {
+          for (const rel of stateData.new_relationships) {
+            if (!rel?.subject || !rel?.object) continue;
+            await neo4jStorage.addEntityRelationship(
+              story_id,
+              rel.subject,
+              rel.object,
+              rel.relation || "RELATED_TO",
+            );
+          }
         }
       }
     } catch (e) {
-      console.warn("Failed to parse continuity extraction", e);
+      console.warn("Failed to apply continuity extraction", e);
     }
 
     return {

@@ -125,7 +125,23 @@ ${manuscript}`,
       return report;
     });
 
-    await Promise.all(promises);
+    // Tolerate partial failures: a single lens erroring (e.g. one provider
+    // hiccup, or the manuscript exceeding a model's context window) should not
+    // discard the lenses that succeeded.
+    const settled = await Promise.allSettled(promises);
+    const failedCount = settled.filter((s) => s.status === "rejected").length;
+
+    if (reports.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: all ${aspectFiles.length} StoryScope lenses failed. The manuscript may exceed the diagnostic model's context window, or the provider returned errors. No reports were generated.`,
+          },
+        ],
+        isError: true,
+      };
+    }
 
     // Synthesize Executive Summary
     const synthesisPrompt = `You are the Executive Editor-in-Chief. Your team of specialist dramaturgs and structuralists have provided deep-dive reports on the manuscript from multiple distinct analytical lenses (Plot, Agents, Perspective, etc.).
@@ -157,7 +173,7 @@ Format your output beautifully in Markdown.`;
       content: [
         {
           type: "text",
-          text: `StoryScope Final Review Complete! Generated ${reports.length} aspect reports and 1 Executive Summary. Saved to workspace under ${story_id}/storyscope-reports.`,
+          text: `StoryScope Final Review Complete! Generated ${reports.length} of ${aspectFiles.length} aspect reports${failedCount > 0 ? ` (${failedCount} lens(es) failed and were skipped)` : ""} and 1 Executive Summary. Saved to workspace under ${story_id}/storyscope-reports.`,
         },
       ],
     };

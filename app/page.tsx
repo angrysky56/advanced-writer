@@ -134,7 +134,6 @@ export default function ChatPage() {
   const [modelGen, setModelGen] = useState<string>("default");
   const [modelDiag, setModelDiag] = useState<string>("default");
   const [modelBrain, setModelBrain] = useState<string>("default");
-  const [modelEmbed, setModelEmbed] = useState<string>("default");
   const [modelDefaults, setModelDefaults] = useState<any>({});
   const [openrouterModels, setOpenrouterModels] = useState<any[]>([]);
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
@@ -288,9 +287,7 @@ export default function ChatPage() {
           modelOverrides: {
             generation: modelGen !== "default" ? modelGen : undefined,
             diagnostic: modelDiag !== "default" ? modelDiag : undefined,
-            brainstorm: modelBrain !== "default" ? modelBrain : undefined,
-            embedding: modelEmbed !== "default" ? modelEmbed : undefined,
-          },
+            brainstorm: modelBrain !== "default" ? modelBrain : undefined,          },
         },
       },
     );
@@ -306,9 +303,7 @@ export default function ChatPage() {
           modelOverrides: {
             generation: modelGen !== "default" ? modelGen : undefined,
             diagnostic: modelDiag !== "default" ? modelDiag : undefined,
-            brainstorm: modelBrain !== "default" ? modelBrain : undefined,
-            embedding: modelEmbed !== "default" ? modelEmbed : undefined,
-          },
+            brainstorm: modelBrain !== "default" ? modelBrain : undefined,          },
         },
       },
     );
@@ -453,9 +448,7 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
           modelOverrides: {
             generation: modelGen !== "default" ? modelGen : undefined,
             diagnostic: modelDiag !== "default" ? modelDiag : undefined,
-            brainstorm: modelBrain !== "default" ? modelBrain : undefined,
-            embedding: modelEmbed !== "default" ? modelEmbed : undefined,
-          },
+            brainstorm: modelBrain !== "default" ? modelBrain : undefined,          },
         },
       },
     );
@@ -1164,38 +1157,6 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                     ))}
                   </optgroup>
                 )}
-                {ollamaModels.length > 0 && (
-                  <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
-                    {ollamaModels.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-
-            {/* Vector Embedding */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", fontWeight: "600" }}>
-                Vector Embedding Model
-              </label>
-              <select
-                value={modelEmbed}
-                onChange={(e) => setModelEmbed(e.target.value)}
-                style={{
-                  background: "rgba(0,0,0,0.25)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  color: "#fff",
-                  fontSize: "0.75rem",
-                  padding: "6px 8px",
-                  outline: "none",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="default" style={{ background: "#1f1f2e" }}>
-                  Default ({modelDefaults.embedding?.split("/").slice(1).join("/") || "Env Default"})
-                </option>
                 {ollamaModels.length > 0 && (
                   <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
                     {ollamaModels.map((m) => (

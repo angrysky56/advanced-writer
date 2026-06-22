@@ -27,21 +27,6 @@ export class OllamaClient {
     const data = await response.json();
     return data.message.content;
   }
-
-  async getEmbeddings(model: string, text: string) {
-    const response = await fetch(`${this.baseUrl}/api/embed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, input: text })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ollama Embedding error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.embeddings[0]; // array of floats
-  }
 }
 
 export const ollamaClient = new OllamaClient();

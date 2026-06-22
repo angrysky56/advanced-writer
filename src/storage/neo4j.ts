@@ -83,9 +83,22 @@ export class Neo4jStorage {
         `,
         { storyId },
       );
-      const characters = charsResult.records.map(
-        (record) => record.get("c").properties,
-      );
+      // Project a lean character summary. Injecting the full node (raw profile
+      // document + unbounded logs) into every scene prompt is a major drift and
+      // token-bloat source, so we expose only the live arc-relevant fields.
+      const characters = charsResult.records.map((record) => {
+        const p = record.get("c").properties;
+        return {
+          name: p.name,
+          archetype: p.archetype,
+          role: p.role,
+          hamartia: p.hamartia,
+          shadow: p.shadow,
+          individuation_state: p.individuation_state,
+          panksepp_primary: p.panksepp_primary,
+          current_state: p.current_state,
+        };
+      });
 
       const entitiesResult = await session.run(
         `
@@ -149,13 +162,27 @@ export class Neo4jStorage {
   ) {
     const session = this.getSession();
     try {
+      // Keep a bounded rolling arc log (last 8 beats) and rebuild current_state
+      // from it. The previous unbounded `state + " | " + update` concatenation
+      // grew without limit and was injected into every downstream prompt.
       await session.run(
         `
         MATCH (c:Character {name: $name})
         WHERE $storyId IN c.story_ids
-        SET c.current_state = c.current_state + " | " + $stateUpdate
+        SET c.state_log = (coalesce(c.state_log, []) + $stateUpdate)[-8..],
+            c.updated_at = $now
+        WITH c
+        SET c.current_state = reduce(
+          s = '', x IN c.state_log |
+          CASE WHEN s = '' THEN x ELSE s + ' | ' + x END
+        )
         `,
-        { name: characterName, storyId, stateUpdate },
+        {
+          name: characterName,
+          storyId,
+          stateUpdate,
+          now: new Date().toISOString(),
+        },
       );
     } finally {
       await session.close();
@@ -170,7 +197,7 @@ export class Neo4jStorage {
   ) {
     const session = this.getSession();
     try {
-      const id = `${storyId}_entity_${entityName.replace(/\\s+/g, "_").toLowerCase()}`;
+      const id = `${storyId}_entity_${entityName.replace(/\s+/g, "_").toLowerCase()}`;
       await session.run(
         `
         MERGE (e:Entity { id: $id })
@@ -200,7 +227,8 @@ export class Neo4jStorage {
       // Find nodes by name and storyId. relation cannot be parameterized as a label directly in cypher.
       // We will use APOC if available or dynamic query creation.
       // For simplicity, we just use string replacement for relation type (sanitize first)
-      const relType = relation.replace(/[^A-Z_]/gi, "_").toUpperCase();
+      let relType = relation.replace(/[^A-Z_]/gi, "_").toUpperCase();
+      if (!/[A-Z]/.test(relType)) relType = "RELATED_TO"; // guard empty/invalid
 
       await session.run(
         `
@@ -210,6 +238,73 @@ export class Neo4jStorage {
         `,
         { storyId, subjectName, objectName },
       );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getCharacterById(characterId: string): Promise<any | null> {
+    const session = this.getSession();
+    try {
+      const result = await session.run(
+        `MATCH (c:Character { id: $id }) RETURN c`,
+        { id: characterId },
+      );
+      if (result.records.length === 0) return null;
+      return result.records[0].get("c").properties;
+    } catch (e) {
+      console.error("Neo4j getCharacterById error:", e);
+      return null;
+    } finally {
+      await session.close();
+    }
+  }
+
+  async listAllCharacters(): Promise<any[]> {
+    const session = this.getSession();
+    try {
+      const result = await session.run(
+        `MATCH (c:Character) RETURN c ORDER BY c.name`,
+      );
+      return result.records.map((r) => r.get("c").properties);
+    } catch (e) {
+      console.error("Neo4j listAllCharacters error:", e);
+      return [];
+    } finally {
+      await session.close();
+    }
+  }
+
+  /** Patch arbitrary scalar metadata fields on a character node by id. */
+  async updateCharacterMeta(
+    characterId: string,
+    fields: Record<string, string>,
+  ): Promise<boolean> {
+    const allowed = [
+      "name",
+      "archetype",
+      "hamartia",
+      "shadow",
+      "moral_weakness",
+      "individuation_state",
+      "role",
+      "panksepp_primary",
+    ];
+    const updates: Record<string, string> = {};
+    for (const key of allowed) {
+      if (fields[key] !== undefined) updates[key] = fields[key];
+    }
+    if (Object.keys(updates).length === 0) return false;
+
+    const session = this.getSession();
+    try {
+      const result = await session.run(
+        `MATCH (c:Character { id: $id })
+         SET c += $updates, c.updated_at = $now
+         RETURN c`,
+        { id: characterId, updates, now: new Date().toISOString() },
+      );
+      return result.records.length > 0;
     } finally {
       await session.close();
     }

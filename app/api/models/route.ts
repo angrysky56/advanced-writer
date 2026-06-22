@@ -7,9 +7,11 @@ export async function GET() {
 
   // 1. Fetch OpenRouter models
   try {
+    // Generous guard so the model picker never blocks generation. Only here to
+    // avoid hanging forever on an unreachable host — NOT a generation timeout.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-    
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
     const headers: Record<string, string> = {};
     if (ENV.OPENROUTER_API_KEY) {
       headers["Authorization"] = `Bearer ${ENV.OPENROUTER_API_KEY}`;
@@ -51,8 +53,10 @@ export async function GET() {
 
   // 2. Fetch Ollama models
   try {
+    // Generous guard (Ollama serializes requests, so /api/tags can queue behind
+    // an in-progress generation). Long enough to never drop local models.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const baseUrl = ENV.OLLAMA_BASE_URL || "http://localhost:11434";
     const res = await fetch(`${baseUrl}/api/tags`, {
@@ -96,7 +100,6 @@ export async function GET() {
   ensurePresent(ENV.MODEL_GENERATION);
   ensurePresent(ENV.MODEL_DIAGNOSTIC);
   ensurePresent(ENV.MODEL_BRAINSTORM);
-  ensurePresent(ENV.MODEL_EMBEDDING);
 
   return NextResponse.json({
     openrouter: openrouterModels,
@@ -105,7 +108,6 @@ export async function GET() {
       generation: ENV.MODEL_GENERATION,
       diagnostic: ENV.MODEL_DIAGNOSTIC,
       brainstorm: ENV.MODEL_BRAINSTORM,
-      embedding: ENV.MODEL_EMBEDDING,
     },
   });
 }
