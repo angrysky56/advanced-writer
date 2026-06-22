@@ -64,7 +64,7 @@ export async function executeDevelopCharacter(args: any) {
 
       const charPrompt = `You are a character psychology expert. Generate a deeply flawed Jungian character profile for a character named ${name}${archetype ? ` with the ${archetype} archetype` : ""}. Detail their core desires, archetype, hamartia, shadow self, moral weakness, and Panksepp affect profile.
 
-OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directly with the character's name as an H2 heading (## ${name}). No preamble, acknowledgement, or meta commentary.`;
+OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directly with the character's name as an H2 heading (## ${name}). No preamble, acknowledgement, or meta commentary. (Note: avoid the AI-default name register — Elara/Elinor/Lyra/Voss/Thorne and the like — unless the user explicitly chose this name.)`;
       const characterDoc = await aiRouter.generateCompletion({
         taskType: "generation",
         systemPrompt: charPrompt,

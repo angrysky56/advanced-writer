@@ -14,9 +14,9 @@ interface Character {
 
 interface Diagnostic {
   sceneId: string;
-  cortisol: number;
-  oxytocin: number;
-  dopamine: number;
+  cortisol: number | null;
+  oxytocin: number | null;
+  dopamine: number | null;
   pathologies: string[];
 }
 
@@ -600,7 +600,14 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
 
   // Render Pacing Chart SVG
   const renderPacingChart = () => {
-    const diags = activeStory?.diagnostics || [];
+    // Only chart scenes that carry REAL parsed scores (no fabricated points).
+    const diags = (activeStory?.diagnostics || []).filter(
+      (d) => d.cortisol != null && d.oxytocin != null && d.dopamine != null,
+    ) as (Diagnostic & {
+      cortisol: number;
+      oxytocin: number;
+      dopamine: number;
+    })[];
     if (diags.length === 0) {
       return (
         <div
@@ -610,7 +617,8 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
             color: "rgba(255,255,255,0.3)",
           }}
         >
-          No pacing diagnostics data found. Run a diagnostic scan to populate.
+          No scored diagnostics yet. Run a diagnostic scan (review_narrative) to
+          populate real pacing scores.
         </div>
       );
     }
@@ -2466,9 +2474,9 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                     <div className="diag-header">
                       <span className="diag-scene-id">{d.sceneId}</span>
                       <div className="diag-scores">
-                        <span className="score-badge c">C: {d.cortisol}</span>
-                        <span className="score-badge o">O: {d.oxytocin}</span>
-                        <span className="score-badge d">D: {d.dopamine}</span>
+                        <span className="score-badge c">C: {d.cortisol ?? "—"}</span>
+                        <span className="score-badge o">O: {d.oxytocin ?? "—"}</span>
+                        <span className="score-badge d">D: {d.dopamine ?? "—"}</span>
                       </div>
                     </div>
                   </div>

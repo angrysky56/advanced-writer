@@ -15,9 +15,9 @@ interface Character {
 // Interface for parsed diagnostic
 interface Diagnostic {
   sceneId: string;
-  cortisol: number;
-  oxytocin: number;
-  dopamine: number;
+  cortisol: number | null;
+  oxytocin: number | null;
+  dopamine: number | null;
   pathologies: string[];
 }
 
@@ -238,27 +238,26 @@ export async function GET() {
             .replace(/_/g, " ")
             .replace(/\b\w/g, (c) => c.toUpperCase());
 
-          const hash = sceneId
-            .split("")
-            .reduce((acc, c) => acc + c.charCodeAt(0), 0);
+          // Parse REAL scores from the diagnostic's machine-readable block.
+          // No hash fallback — an unscored report stays null (honestly "—" in
+          // the UI) rather than fabricating numbers or pathologies.
+          const num = (re: RegExp): number | null => {
+            const m = content.match(re);
+            return m ? parseInt(m[1], 10) : null;
+          };
+          const cortisol = num(/cortisol\s*[:=]\s*(\d+)/i);
+          const oxytocin = num(/oxytocin\s*[:=]\s*(\d+)/i);
+          const dopamine = num(/dopamine\s*[:=]\s*(\d+)/i);
 
-          // Parse actual neurochemical scores from file if present
-          let cortisol = 3 + (hash % 8);
-          let oxytocin = 2 + (hash % 9);
-          let dopamine = 4 + (hash % 7);
-
-          const cortMatch = content.match(/cortisol:\s*(\d+)/i);
-          const oxyMatch = content.match(/oxytocin:\s*(\d+)/i);
-          const dopaMatch = content.match(/dopamine:\s*(\d+)/i);
-          if (cortMatch) cortisol = parseInt(cortMatch[1], 10);
-          if (oxyMatch) oxytocin = parseInt(oxyMatch[1], 10);
-          if (dopaMatch) dopamine = parseInt(dopaMatch[1], 10);
-
-          const pathologies = [];
-          if (cortisol < 5) pathologies.push("Somatic Metaphor Cliché");
-          if (oxytocin < 4) pathologies.push("False Protagonist Activity");
-          if (dopamine < 4) pathologies.push("Flatlining Dopamine");
-          if (hash % 3 === 0) pathologies.push("Moralizing Ending");
+          // Pathologies come ONLY from the model's explicit PATHOLOGIES line.
+          let pathologies: string[] = [];
+          const pathLine = content.match(/PATHOLOGIES\s*[:=]\s*([^\n\r]+)/i);
+          if (pathLine) {
+            pathologies = pathLine[1]
+              .split(/[,;]/)
+              .map((s) => s.replace(/[*_`]/g, "").trim())
+              .filter((s) => s.length > 0 && !/^none$/i.test(s));
+          }
 
           diagnostics.push({
             sceneId,

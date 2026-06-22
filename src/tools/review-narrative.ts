@@ -1,5 +1,6 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
+import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 
 export const reviewNarrativeDef = {
   name: "review_narrative",
@@ -33,7 +34,7 @@ export async function executeReviewNarrative(args: any) {
   } = args;
 
   try {
-    const diagPrompt = `You are a neurochemical narrative editor. Analyze the following ${scope} for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\n\nText:\n${text}`;
+    const diagPrompt = `You are a neurochemical narrative editor. Analyze the following ${scope} for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\n\nText:\n${text}${DIAGNOSTIC_SCORE_BLOCK}`;
 
     const diagnosticReport = await aiRouter.generateCompletion({
       taskType: "diagnostic",

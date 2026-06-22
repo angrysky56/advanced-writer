@@ -3,6 +3,7 @@ import { workspaceExporter } from "../storage/workspace.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
 import { generateAndSeedCast } from "./_cast.js";
+import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 
 export const createNarrativeDef = {
   name: "create_narrative",
@@ -132,7 +133,7 @@ ${castBrief}`;
     });
 
     // 4. Diagnostic
-    const diagPrompt = `Analyze the following scene for emotional pacing (cortisol, oxytocin, dopamine).\nScene:\n${draft}`;
+    const diagPrompt = `Analyze the following scene for emotional pacing (cortisol, oxytocin, dopamine).\nScene:\n${draft}${DIAGNOSTIC_SCORE_BLOCK}`;
     const diagnostic = await aiRouter.generateCompletion({
       taskType: "diagnostic",
       systemPrompt: diagPrompt,

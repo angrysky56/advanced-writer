@@ -123,6 +123,17 @@ export function detectAmbivalence(
   return out;
 }
 
+/**
+ * Appended to every neuro-critique prompt so each report ends with a
+ * machine-readable block the UI can parse into REAL scores/pathologies — rather
+ * than the UI fabricating them from a name hash.
+ */
+export const DIAGNOSTIC_SCORE_BLOCK = `
+
+At the very END of your report, output this exact machine-readable block and nothing after it:
+SCORES: cortisol=<1-10>, oxytocin=<1-10>, dopamine=<1-10>
+PATHOLOGIES: <comma-separated subset of: Somatic Metaphor Cliché, False Protagonist Activity, Flatlining Dopamine, Moralizing Ending, Telling Not Showing, Purple Prose; or the single word none>`;
+
 export interface CharacterMeta {
   name: string;
   archetype: string;

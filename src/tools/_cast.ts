@@ -11,7 +11,9 @@ import {
 // free of conversational preamble (e.g. "Excellent. Based on the logline...").
 const FORMAT_RULES = `
 
-OUTPUT RULES: Respond with ONLY the character profile in clean markdown, beginning directly with the character's name as an H2 heading (## Name). Do NOT include any preamble, acknowledgement, or meta commentary (no "Here is", "Certainly", "Based on the...", etc.). Use consistent section headings: Core Desire, Archetype, Hamartia, Shadow, Moral Weakness, Panksepp Affect.`;
+OUTPUT RULES: Respond with ONLY the character profile in clean markdown, beginning directly with the character's name as an H2 heading (## Name). Do NOT include any preamble, acknowledgement, or meta commentary (no "Here is", "Certainly", "Based on the...", etc.). Use consistent section headings: Core Desire, Archetype, Hamartia, Shadow, Moral Weakness, Panksepp Affect.
+
+NAMING: Avoid the overused AI-default register. Do NOT use first names like Elara, Elinor, Lyra, Aria, Kael, Seraphina, Thalia, or surnames like Voss, Thorne, Vance, Blackwood, Hart. Choose names with concrete cultural, regional, and period specificity appropriate to this story's setting — the kind a careful human author would pick, not the statistical average of "fantasy name."`;
 
 export interface SeededCharacter {
   id: string;

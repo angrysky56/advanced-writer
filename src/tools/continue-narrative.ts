@@ -2,7 +2,7 @@ import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
-import { safeParseJson } from "../ai/extract.js";
+import { safeParseJson, DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 
 export const continueNarrativeDef = {
   name: "continue_narrative",
@@ -169,7 +169,7 @@ CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for
     });
 
     // Automatically run diagnostic on the new scene
-    const diagPrompt = `Analyze the following scene for emotional pacing (cortisol, oxytocin, dopamine).\nScene:\n${newDraft}`;
+    const diagPrompt = `Analyze the following scene for emotional pacing (cortisol, oxytocin, dopamine).\nScene:\n${newDraft}${DIAGNOSTIC_SCORE_BLOCK}`;
     const diagnostic = await aiRouter.generateCompletion({
       taskType: "diagnostic",
       systemPrompt: diagPrompt,

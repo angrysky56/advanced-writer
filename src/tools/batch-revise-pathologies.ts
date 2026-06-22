@@ -1,6 +1,7 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
+import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 
 export const batchRevisePathologiesDef = {
   name: "batch_revise_pathologies",
@@ -130,7 +131,7 @@ Rewrite the scene now. Maintain formatting style.`;
         // re-revises an already-fixed scene (draft/diagnostic desync).
         const rescore = await aiRouter.generateCompletion({
           taskType: "diagnostic",
-          systemPrompt: `Analyze the following revised scene for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\nScene:\n${rewrittenDraft}`,
+          systemPrompt: `Analyze the following revised scene for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\nScene:\n${rewrittenDraft}${DIAGNOSTIC_SCORE_BLOCK}`,
           userMessage: "Provide the updated neuro-critique report.",
         });
         await workspaceExporter.saveDiagnosticReport(
