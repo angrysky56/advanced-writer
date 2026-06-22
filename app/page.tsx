@@ -138,6 +138,7 @@ export default function ChatPage() {
   const [openrouterModels, setOpenrouterModels] = useState<any[]>([]);
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
   const [showModelConfig, setShowModelConfig] = useState<boolean>(false);
+  const [jobs, setJobs] = useState<any[]>([]);
 
   const { messages, sendMessage, status } = useChat();
   const [input, setInput] = useState("");
@@ -248,6 +249,18 @@ export default function ChatPage() {
         if (data.defaults) setModelDefaults(data.defaults);
       })
       .catch((err) => console.error("Failed to load models", err));
+  }, []);
+
+  // Poll background jobs for the running/finished indicator.
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/jobs")
+        .then((r) => r.json())
+        .then((d) => setJobs(Array.isArray(d.jobs) ? d.jobs : []))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
   }, []);
 
   // Automatically re-fetch workspace when a tool completes execution (isLoading changes from true to false)
@@ -713,8 +726,41 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
     );
   };
 
+  const runningJobs = jobs.filter((j) => j.status === "running");
+
   return (
     <div className="dashboard-layout">
+      {/* Background-job indicator (cosmetic) */}
+      {jobs.length > 0 && (
+        <div
+          title={jobs
+            .slice(0, 6)
+            .map((j) => `${j.id} ${j.tool}: ${j.status}`)
+            .join("\n")}
+          style={{
+            position: "fixed",
+            top: 12,
+            right: 16,
+            zIndex: 2000,
+            padding: "6px 12px",
+            borderRadius: 8,
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            color: "#fff",
+            background: runningJobs.length
+              ? "rgba(176,124,32,0.92)"
+              : "rgba(40,120,64,0.92)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.3)",
+          }}
+        >
+          {runningJobs.length
+            ? `⏳ ${runningJobs.length} job${runningJobs.length > 1 ? "s" : ""} running…`
+            : `✓ ${jobs[0].tool} ${jobs[0].status}`}
+        </div>
+      )}
+
       {/* LEFT PANEL: Workspace Explorer */}
       <aside className="left-sidebar">
         <div className="panel-header" style={{ paddingBottom: "10px" }}>
