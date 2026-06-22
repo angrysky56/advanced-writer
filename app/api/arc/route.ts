@@ -21,10 +21,17 @@ export async function GET(req: Request) {
           }
         })
         .filter(Boolean);
+      let scratchpad: any = null;
+      try {
+        scratchpad = c.scratchpad ? JSON.parse(c.scratchpad) : null;
+      } catch {
+        scratchpad = null;
+      }
       return {
         name: c.name,
         role: c.role || "",
         panksepp_primary: c.panksepp_primary || "",
+        scratchpad,
         snapshots,
       };
     });

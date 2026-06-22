@@ -3,6 +3,7 @@ import { workspaceExporter } from "../storage/workspace.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
 import { generateAndSeedCast } from "./_cast.js";
+import { recordSceneTracking } from "./_tracking.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 
 export const createNarrativeDef = {
@@ -96,7 +97,7 @@ export async function executeCreateNarrative(args: any) {
     const archPrompt = `You are an expert story architect. Build a story architecture brief for a ${genre} story with a ${tone} tone.
 Logline: ${logline}
 
-Use ONLY this established cast — do not rename them or invent new protagonists:
+Use ONLY this established cast. Do NOT invent any new named character — every role (antagonist, mentor, family member, love interest, etc.) must be filled by one of these characters or left unnamed/incidental. If the premise implies one person occupies multiple roles (e.g. the antagonist is also a relative), map them to a SINGLE cast member; never split one conceptual person into two named characters.
 ${castBrief}`;
     const architecture = await aiRouter.generateCompletion({
       taskType: "generation",
@@ -143,6 +144,16 @@ ${castBrief}`;
       storyName,
       "scene_1",
       diagnostic,
+    );
+
+    // Track scene 1 (initial scratchpads + affect baseline-from-action), so
+    // every later scene has a real continuity sheet to read back.
+    await recordSceneTracking(
+      storyName,
+      "scene_1",
+      draft,
+      castBrief,
+      cast.map((c) => ({ name: c.meta.name, role: c.meta.role })),
     );
 
     if (args.mode === "fast-auto") {

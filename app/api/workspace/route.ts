@@ -249,9 +249,11 @@ export async function GET() {
           const oxytocin = num(/oxytocin\s*[:=]\s*(\d+)/i);
           const dopamine = num(/dopamine\s*[:=]\s*(\d+)/i);
 
-          // Pathologies come ONLY from the model's explicit PATHOLOGIES line.
+          // Pathologies come ONLY from the model's explicit machine-block line
+          // (anchored to line-start so we don't match an earlier prose
+          // "**Pathologies:**" header, which is empty and zeroed the panel).
           let pathologies: string[] = [];
-          const pathLine = content.match(/PATHOLOGIES\s*[:=]\s*([^\n\r]+)/i);
+          const pathLine = content.match(/^\s*PATHOLOGIES\s*[:=]\s*(.+)$/im);
           if (pathLine) {
             pathologies = pathLine[1]
               .split(/[,;]/)

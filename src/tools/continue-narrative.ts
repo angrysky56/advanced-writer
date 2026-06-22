@@ -2,7 +2,11 @@ import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
-import { safeParseJson, DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
+import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
+import {
+  recordSceneTracking,
+  buildScratchpadContext,
+} from "./_tracking.js";
 
 export const continueNarrativeDef = {
   name: "continue_narrative",
@@ -99,6 +103,9 @@ export async function executeContinueNarrative(args: any) {
         )
         .join("\n") || "No cast on record yet.";
 
+    // Each character's living continuity sheet, read back before writing.
+    const scratchpadContext = buildScratchpadContext(storyState.characters || []);
+
     const semanticScenes = await chromaStorage.searchScenes(
       user_direction || "next scene",
       2,
@@ -128,6 +135,9 @@ ${worldLoreContext}
 === CANON CAST (use ONLY these as named characters; do NOT introduce new named primary characters) ===
 ${canonCast}
 
+=== CHARACTER STATE SHEETS (continuity bible — each character's CURRENT state; maintain these and do NOT contradict them) ===
+${scratchpadContext}
+
 === GRAPH DB STORY STATE (CHARACTERS, ENTITIES, RELATIONSHIPS) ===
 ${graphStateContext}
 
@@ -142,6 +152,7 @@ ${user_direction || "Continue the narrative naturally, maintaining the tone, cha
 
 Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.
 Use ONLY the canon cast above for named characters — develop them, do not replace them with newly-invented primary characters.
+Honor the CHARACTER STATE SHEETS: each character's location, what they know, what they are holding, and their relationships must stay consistent with their recorded state unless this scene deliberately changes them (and if it does, the change must be shown).
 CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for AI dialogue or output. If CodeWhisper communicates in code, integrate it naturally into the prose (e.g., using italics or standard quotes). The final output must read like a traditional novel, not a GitHub README.`;
 
     const newDraft = await aiRouter.generateCompletion({
@@ -182,84 +193,15 @@ CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for
       diagnostic,
     );
 
-    // Run Continuity Extraction to update Neo4j
-    const continuityPrompt = `You are a strict data extractor. Analyze the new scene and extract continuity state changes.
-
-CANON CAST — when these characters appear, use their EXACT full name exactly as written here (never a nickname or first name only), and include EVERY canon character who is present in this scene:
-${canonCast}
-
-Output ONLY valid JSON matching this structure:
-{
-  "character_updates": [ {
-    "name": "Character Name",
-    "arc_progression": "What changed for them in this scene",
-    "panksepp": { "SEEKING": 1-10, "FEAR": 1-10, "RAGE": 1-10, "LUST": 1-10, "CARE": 1-10, "PANIC_GRIEF": 1-10, "PLAY": 1-10 },
-    "plutchik": { "joy": 1-10, "trust": 1-10, "fear": 1-10, "surprise": 1-10, "sadness": 1-10, "disgust": 1-10, "anger": 1-10, "anticipation": 1-10 }
-  } ],
-  "new_entities": [ { "name": "Entity Name", "type": "Animal/Prop/Location", "description": "Brief description" } ],
-  "new_relationships": [ { "subject": "Name1", "relation": "OWNS/KNOWS/AT", "object": "Name2" } ]
-}
-For each character PRESENT in this scene, give their affect readings AS OF THIS SCENE (how this scene's events have moved them) so their emotional arc can be tracked over time. If no updates, return empty arrays. DO NOT include markdown formatting.
-Scene:
-${newDraft}`;
-    const continuityExtraction = await aiRouter.generateCompletion({
-      taskType: "generation",
-      systemPrompt: continuityPrompt,
-      userMessage: "Extract continuity state.",
-    });
-
-    try {
-      const stateData = safeParseJson<any>(continuityExtraction);
-      if (!stateData) {
-        console.warn("Continuity extraction returned no parseable JSON.");
-      } else {
-        if (Array.isArray(stateData.character_updates)) {
-          for (const update of stateData.character_updates) {
-            if (!update?.name) continue;
-            await neo4jStorage.updateCharacterState(
-              story_id,
-              update.name,
-              update.arc_progression || "",
-            );
-            // Record this scene's affect reading so the character's emotional
-            // arc (Panksepp + Plutchik) is tracked across the whole story.
-            if (update.panksepp || update.plutchik) {
-              await neo4jStorage.appendAffectSnapshot(
-                story_id,
-                update.name,
-                next_scene_id,
-                update.panksepp || {},
-                update.plutchik || {},
-              );
-            }
-          }
-        }
-        if (Array.isArray(stateData.new_entities)) {
-          for (const entity of stateData.new_entities) {
-            if (!entity?.name) continue;
-            await neo4jStorage.addEntity(
-              story_id,
-              entity.name,
-              entity.type || "Thing",
-              entity.description || "",
-            );
-          }
-        }
-        if (Array.isArray(stateData.new_relationships)) {
-          for (const rel of stateData.new_relationships) {
-            if (!rel?.subject || !rel?.object) continue;
-            await neo4jStorage.addEntityRelationship(
-              story_id,
-              rel.subject,
-              rel.object,
-              rel.relation || "RELATED_TO",
-            );
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to apply continuity extraction", e);
-    }
+    // Continuity supervisor: merge each present character's state sheet, record
+    // their affect snapshot, arc beat, and any new entities/relationships.
+    await recordSceneTracking(
+      story_id,
+      next_scene_id,
+      newDraft,
+      canonCast,
+      storyState.characters || [],
+    );
 
     return {
       content: [

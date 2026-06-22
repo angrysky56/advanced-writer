@@ -97,6 +97,7 @@ export class Neo4jStorage {
           individuation_state: p.individuation_state,
           panksepp_primary: p.panksepp_primary,
           current_state: p.current_state,
+          scratchpad: p.scratchpad,
         };
       });
 
@@ -226,6 +227,41 @@ export class Neo4jStorage {
         SET c.affect_log = (coalesce(c.affect_log, []) + $snapshot)[-40..]
         `,
         { name: characterName, storyId, snapshot },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Overwrite a character's structured continuity scratchpad (a JSON string:
+   * location, knows, wants, holding, relationships, last_action). The extractor
+   * returns the full merged sheet each scene, so we overwrite rather than append.
+   */
+  async updateScratchpad(
+    storyId: string,
+    characterName: string,
+    scratchpadJson: string,
+  ) {
+    const session = this.getSession();
+    try {
+      await session.run(
+        `
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids AND (
+          toLower(c.name) = toLower($name)
+          OR toLower(c.name) CONTAINS toLower($name)
+          OR toLower($name) CONTAINS toLower(c.name)
+        )
+        WITH c LIMIT 1
+        SET c.scratchpad = $scratchpad, c.updated_at = $now
+        `,
+        {
+          name: characterName,
+          storyId,
+          scratchpad: scratchpadJson,
+          now: new Date().toISOString(),
+        },
       );
     } finally {
       await session.close();
