@@ -167,8 +167,13 @@ export class Neo4jStorage {
       // grew without limit and was injected into every downstream prompt.
       await session.run(
         `
-        MATCH (c:Character {name: $name})
-        WHERE $storyId IN c.story_ids
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids AND (
+          toLower(c.name) = toLower($name)
+          OR toLower(c.name) CONTAINS toLower($name)
+          OR toLower($name) CONTAINS toLower(c.name)
+        )
+        WITH c LIMIT 1
         SET c.state_log = (coalesce(c.state_log, []) + $stateUpdate)[-8..],
             c.updated_at = $now
         WITH c
@@ -211,8 +216,13 @@ export class Neo4jStorage {
       });
       await session.run(
         `
-        MATCH (c:Character {name: $name})
-        WHERE $storyId IN c.story_ids
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids AND (
+          toLower(c.name) = toLower($name)
+          OR toLower(c.name) CONTAINS toLower($name)
+          OR toLower($name) CONTAINS toLower(c.name)
+        )
+        WITH c LIMIT 1
         SET c.affect_log = (coalesce(c.affect_log, []) + $snapshot)[-40..]
         `,
         { name: characterName, storyId, snapshot },

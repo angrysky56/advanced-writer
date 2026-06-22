@@ -184,6 +184,10 @@ CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for
 
     // Run Continuity Extraction to update Neo4j
     const continuityPrompt = `You are a strict data extractor. Analyze the new scene and extract continuity state changes.
+
+CANON CAST — when these characters appear, use their EXACT full name exactly as written here (never a nickname or first name only), and include EVERY canon character who is present in this scene:
+${canonCast}
+
 Output ONLY valid JSON matching this structure:
 {
   "character_updates": [ {

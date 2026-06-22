@@ -126,6 +126,21 @@ ${costarProfile}`;
       },
     });
 
+    // Seed a creation-time affect baseline so every character's arc starts with
+    // a tracked point (otherwise a character only appears once they're updated
+    // mid-draft, leaving single dots instead of a trajectory).
+    try {
+      await neo4jStorage.appendAffectSnapshot(
+        storyName,
+        meta.name,
+        "baseline",
+        meta.panksepp,
+        meta.plutchik,
+      );
+    } catch {
+      // Non-fatal.
+    }
+
     seeded.push({ id, fileSlug: slug, profile: spec.profile, meta });
   }
 
