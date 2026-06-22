@@ -87,6 +87,7 @@ rapid generation. The agent still applies all essential principles and runs self
 
 **Switching Modes:**
 The user can say at any time:
+
 - "Let's brainstorm" / "ask me questions" → Mode 1
 - "Let's collaborate" / "work with me" → Mode 2
 - "Just go" / "auto mode" / "fast mode" → Mode 3
@@ -115,14 +116,14 @@ If intent is clear from the user's initial message, skip the intake question and
 
 <routing>
 
-| User Intent | Keywords | Workflow |
-|-------------|----------|----------|
-| 1, "write", "create", "story", "narrative", "draft" | `workflows/create-narrative.md` |
+| User Intent                                                      | Keywords                          | Workflow |
+| ---------------------------------------------------------------- | --------------------------------- | -------- |
+| 1, "write", "create", "story", "narrative", "draft"              | `workflows/create-narrative.md`   |
 | 2, "character", "protagonist", "antagonist", "archetype", "cast" | `workflows/develop-characters.md` |
-| 3, "review", "critique", "diagnose", "score", "analyze" | `workflows/review-narrative.md` |
-| 4, "structure", "framework", "paradigm", "format", "outline" | `workflows/select-structure.md` |
-| 5, "rewrite", "fix", "improve", "scene", "passage" | `workflows/rewrite-scene.md` |
-| 6, unclear | Clarify intent, then route |
+| 3, "review", "critique", "diagnose", "score", "analyze"          | `workflows/review-narrative.md`   |
+| 4, "structure", "framework", "paradigm", "format", "outline"     | `workflows/select-structure.md`   |
+| 5, "rewrite", "fix", "improve", "scene", "passage"               | `workflows/rewrite-scene.md`      |
+| 6, unclear                                                       | Clarify intent, then route        |
 
 **After reading the workflow, follow it exactly. Apply all essential principles throughout.**
 
@@ -130,12 +131,31 @@ If intent is clear from the user's initial message, skip the intake question and
 
 <automated_mcp_tools>
 
-The advanced-writer MCP server now features autonomous tools to handle massive structural tasks. Trigger these tools when the user requests large-scale automated generation or review:
+The advanced-writer framework features a suite of 11 native MCP tools plus an integrated search tool to handle everything from core drafting and character psychology to autonomous generation, multi-agent audits, and external research:
 
-1. **build_world_bible**: Automatically expands a logline into a massive World Bible (Factions, Tech/Magic, Economics, Geography) and embeds the lore into a Vector DB so every generated scene organically references the world.
-2. **expand_to_novel**: Explodes a brief synopsis into a full scene-by-scene Beat Sheet. If `auto_draft: true` is passed, it executes a massive autonomous background loop, drafting the entire novel chapter-by-chapter and compiling the final manuscript.
-3. **batch_revise_pathologies**: The "Character Writer's Room." It reads failing neuro-critiques, spawns the characters to argue for their agency, generates unified Character Demands, and perfectly rewrites the bad scenes based on those demands.
-4. **storyscope_final_review**: The ultimate academic structural pass. It dispatches 7 parallel AI specialists to analyze a compiled manuscript across 7 StoryScope lenses (Plot, Agents, Perspective, Temporal, Setting, Style, Events), then uses an 8th Synthesizer agent to generate a prioritized Executive Summary To-Do list for Draft 2.
+1. **create_narrative**: Builds a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
+2. **develop_character**: Creates, updates, queries, or shadow-matches character profiles in the persistent Jungian Archetypal Database.
+3. **review_narrative**: Runs neurochemical scoring (Cortisol, Oxytocin, Dopamine) and pathology scans on a scene or chapter draft.
+4. **select_structure**: Recommends and outlines the story skeleton (e.g. Truby, Dramatica, Kishōtenketsu, Fichtean Curve) based on a premise and designing principle.
+5. **rewrite_scene**: Performs targeted scene-level improvements with specific adjustments on target neurochemical axes based on critique reports.
+6. **continue_narrative**: Automatically generates the next scene draft in sequence, respecting the timeline, character profiles, and user directives.
+7. **build_world_bible**: Autonomously expands a logline into a massive World Bible (Factions, Tech/Magic, Economics, Geography) and stores it on disk.
+8. **expand_to_novel**: Outlines a scene-by-scene Beat Sheet and runs an autonomous background drafting loop to write the entire manuscript chapter-by-chapter.
+9. **batch_revise_pathologies**: The "Character Writer's Room." Spawns character personas to critique a failing draft, compiles Character Demands, and rewrites the scenes to honor them.
+10. **storyscope_final_review**: Runs the ultimate structural audit. It dispatches 10 parallel AI specialists to evaluate a compiled manuscript across 10 StoryScope aspect lenses:
+    - _Plot_: Causal flow, subplot integration, temporal progression
+    - _Agents_: Core desires, tragic flaws, agency vs. fate
+    - _Perspective_: Narrative distance, voice consistency
+    - _Temporal Structure_: Nonlinearity, pacing, time jumps
+    - _Setting_: Physical specificity, atmosphere, spatial layout
+    - _Style_: Sentence variety, vocabulary choice, subtext density
+    - _Events_: Narrative beats, inciting incident, climax, resolution
+    - _Revelation_: Information disclosure, mystery, suspense
+    - _Situatedness_: Cultural unmooring, historical references
+    - _Social Networks_: Character relationships, power dynamics
+      Synthesizes these reports into an Executive Summary containing a Draft 2 prioritized action plan.
+11. **apply_storyscope_revisions**: Autonomously parses the StoryScope Executive Summary action plan and applies all required edits across the drafts.
+12. **web_search**: Searches the web to retrieve specific names, places, cultural touchstones, and domain terms to inject verisimilitude (combats vague allusions).
 
 </automated_mcp_tools>
 
@@ -156,22 +176,27 @@ All domain knowledge in `references/`:
 
 <workflows_index>
 
-| Workflow | Purpose | Primary References |
-|----------|---------|--------------------|
-| create-narrative.md | Build a complete narrative from idea to draft | All references |
-| develop-characters.md | Create persistent, Jungian-anchored character profiles | 03, 04 |
-| review-narrative.md | Score and diagnose existing text | 01, 04, 05 |
-| select-structure.md | Choose the right structural paradigm | 02, 00 |
-| rewrite-scene.md | Targeted scene rewriting with neuro-critique | 01, 05 |
+| Workflow              | Purpose                                                  | Primary References           |
+| --------------------- | -------------------------------------------------------- | ---------------------------- |
+| create-narrative.md   | Build a complete narrative from idea to draft            | All references               |
+| develop-characters.md | Create persistent, Jungian-anchored character profiles   | 03, 04                       |
+| review-narrative.md   | Score and diagnose existing text                         | 01, 04, 05                   |
+| select-structure.md   | Choose the right structural paradigm                     | 02, 00                       |
+| rewrite-scene.md      | Targeted scene rewriting with neuro-critique             | 01, 05                       |
+| build-world-bible.md  | Autonomously expand a premise into a massive World Bible | 00                           |
+| expand-to-novel.md    | Outline a beat sheet and autonomously draft a full novel | All references               |
+| batch-revise.md       | Character Writer's Room pathology revision               | 03, 04, 05                   |
+| storyscope-review.md  | 10-lens structural audit and automated revisions         | 05, storyscope-anti-patterns |
 
 </workflows_index>
 
 <templates_index>
 
-| Template | Used By | Purpose |
-|----------|---------|---------|
-| character-profile.md | develop-characters, create-narrative | Jungian character sheet |
-| neuro-critique-report.md | review-narrative, rewrite-scene | Scene scoring output |
-| story-architecture-brief.md | create-narrative, select-structure | Story planning document |
+| Template                    | Used By                              | Purpose                            |
+| --------------------------- | ------------------------------------ | ---------------------------------- |
+| character-profile.md        | develop-characters, create-narrative | Jungian character sheet            |
+| neuro-critique-report.md    | review-narrative, rewrite-scene      | Scene scoring output               |
+| story-architecture-brief.md | create-narrative, select-structure   | Story planning document            |
+| world-bible.md              | build-world-bible                    | Comprehensive world-building guide |
 
 </templates_index>

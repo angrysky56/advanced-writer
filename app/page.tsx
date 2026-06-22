@@ -173,12 +173,25 @@ export default function ChatPage() {
     tone: "dark",
     target_length: "short_story",
     charAction: "create",
+    charGenMethod: "detailed",
     charName: "",
-    charArchetype: "Hero",
+    charDescription: "",
+    charExistingId: "",
+    charHamartia: "",
+    charMoralWeakness: "",
+    charEthos: "",
+    charShadow: "",
+    charSubjectiveFilter: "",
+    charVoiceNotes: "",
+    charAmbivalentAgency: "",
+    reviewSource: "paste",
+    reviewDraftId: "",
     reviewText: "",
     reviewSceneId: "scene_1",
     structurePremise: "",
     structureDesigningPrinciple: "",
+    rewriteSource: "paste",
+    rewriteDraftId: "",
     rewriteSceneText: "",
     rewriteTargetAxis: "cortisol",
     continuePrevSceneId: "scene_1",
@@ -329,13 +342,16 @@ export default function ChatPage() {
       case "develop_character":
         prompt = `Execute tool develop_character with:
 - action: "${toolFormState.charAction || "create"}"
-- name: "${toolFormState.charName || ""}"
-- archetype: "${toolFormState.charArchetype || ""}"
+- name: "${toolFormState.charGenMethod === "existing" ? toolFormState.charExistingId : toolFormState.charName}"
+- generation_method: "${toolFormState.charGenMethod || "detailed"}"
+${toolFormState.charGenMethod === "description" ? `- description: "${toolFormState.charDescription || ""}"` : ""}
+${toolFormState.charGenMethod === "detailed" ? `- hamartia: "${toolFormState.charHamartia || ""}"\n- moral_weakness: "${toolFormState.charMoralWeakness || ""}"\n- ethos: "${toolFormState.charEthos || ""}"\n- shadow: "${toolFormState.charShadow || ""}"\n- subjective_filter: "${toolFormState.charSubjectiveFilter || ""}"\n- voice_notes: "${toolFormState.charVoiceNotes || ""}"\n- ambivalent_agency: "${toolFormState.charAmbivalentAgency || ""}"` : ""}
 - story_name: "${storyId}"`;
         break;
       case "review_narrative":
         prompt = `Execute tool review_narrative with:
-- text: "${toolFormState.reviewText || ""}"
+- text_source: "${toolFormState.reviewSource === "draft" ? "workspace_draft:" + toolFormState.reviewDraftId : "pasted_text"}"
+${toolFormState.reviewSource === "paste" ? `- text: "${toolFormState.reviewText || ""}"` : ""}
 - scope: "scene"
 - story_id: "${storyId}"
 - scene_id: "${toolFormState.reviewSceneId || "scene_1"}"`;
@@ -348,7 +364,8 @@ export default function ChatPage() {
         break;
       case "rewrite_scene":
         prompt = `Execute tool rewrite_scene with:
-- scene_text: "${toolFormState.rewriteSceneText || ""}"
+- text_source: "${toolFormState.rewriteSource === "draft" ? "workspace_draft:" + toolFormState.rewriteDraftId : "pasted_text"}"
+${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewriteSceneText || ""}"` : ""}
 - target_axis: "${toolFormState.rewriteTargetAxis || "cortisol"}"
 - story_id: "${storyId}"`;
         break;
@@ -1408,7 +1425,7 @@ export default function ChatPage() {
                       Develop Character Node
                     </span>
                     <span className="tool-form-desc">
-                      Creates a deeply flawed archetype and links them to the
+                      Creates a deeply flawed character and links them to the
                       story workspace.
                     </span>
                     <div className="tool-form-grid">
@@ -1427,32 +1444,255 @@ export default function ChatPage() {
                       </div>
                       {toolFormState.charAction === "create" && (
                         <>
-                          <div className="tool-input-group">
+                          <div
+                            className="tool-input-group"
+                            style={{ gridColumn: "1 / -1" }}
+                          >
                             <label className="tool-input-label">
-                              Character Name
+                              Generation Method
                             </label>
-                            <input
-                              className="tool-form-input"
-                              value={toolFormState.charName}
+                            <select
+                              className="tool-form-select"
+                              value={toolFormState.charGenMethod}
                               onChange={(e) =>
-                                updateFormState("charName", e.target.value)
+                                updateFormState("charGenMethod", e.target.value)
                               }
-                              placeholder="e.g. Lexa, Silas"
-                            />
+                            >
+                              <option value="detailed">
+                                By Deep Psychological Profile
+                              </option>
+                              <option value="description">
+                                By Freeform Description
+                              </option>
+                              <option value="existing">
+                                Update Existing Character
+                              </option>
+                            </select>
                           </div>
-                          <div className="tool-input-group">
-                            <label className="tool-input-label">
-                              Jungian Archetype
-                            </label>
-                            <input
-                              className="tool-form-input"
-                              value={toolFormState.charArchetype}
-                              onChange={(e) =>
-                                updateFormState("charArchetype", e.target.value)
-                              }
-                              placeholder="e.g. Hero, Shadow, Jester"
-                            />
-                          </div>
+
+                          {toolFormState.charGenMethod === "existing" ? (
+                            <div
+                              className="tool-input-group"
+                              style={{ gridColumn: "1 / -1" }}
+                            >
+                              <label className="tool-input-label">
+                                Select Workspace Character
+                              </label>
+                              <select
+                                className="tool-form-select"
+                                value={toolFormState.charExistingId}
+                                onChange={(e) =>
+                                  updateFormState(
+                                    "charExistingId",
+                                    e.target.value,
+                                  )
+                                }
+                              >
+                                <option value="">-- Select Character --</option>
+                                {activeStory?.characters?.map((char) => (
+                                  <option key={char.name} value={char.name}>
+                                    {char.name} ({char.archetype})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <div
+                              className="tool-input-group"
+                              style={{ gridColumn: "1 / -1" }}
+                            >
+                              <label className="tool-input-label">
+                                Character Name
+                              </label>
+                              <input
+                                className="tool-form-input"
+                                value={toolFormState.charName}
+                                onChange={(e) =>
+                                  updateFormState("charName", e.target.value)
+                                }
+                                placeholder="e.g. Lexa, Silas"
+                              />
+                            </div>
+                          )}
+
+                          {toolFormState.charGenMethod === "detailed" && (
+                            <>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  Hamartia (Tragic Flaw)
+                                </label>
+                                <textarea
+                                  className="tool-form-textarea"
+                                  value={toolFormState.charHamartia}
+                                  onChange={(e) =>
+                                    updateFormState(
+                                      "charHamartia",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="The critical error in judgment that drives their behavior..."
+                                />
+                              </div>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  Moral Weakness
+                                </label>
+                                <textarea
+                                  className="tool-form-textarea"
+                                  value={toolFormState.charMoralWeakness}
+                                  onChange={(e) =>
+                                    updateFormState(
+                                      "charMoralWeakness",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="How does this flaw actively hurt others?"
+                                />
+                              </div>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  Aristotelian Ethos
+                                </label>
+                                <input
+                                  className="tool-form-input"
+                                  value={toolFormState.charEthos}
+                                  onChange={(e) =>
+                                    updateFormState("charEthos", e.target.value)
+                                  }
+                                  placeholder="Moral disposition (e.g. Highly competent, deeply cynical)"
+                                />
+                              </div>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  The Shadow
+                                </label>
+                                <textarea
+                                  className="tool-form-textarea"
+                                  value={toolFormState.charShadow}
+                                  onChange={(e) =>
+                                    updateFormState(
+                                      "charShadow",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="What do they repress or deny about themselves?"
+                                />
+                              </div>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  Subjective Filter
+                                </label>
+                                <textarea
+                                  className="tool-form-textarea"
+                                  value={toolFormState.charSubjectiveFilter}
+                                  onChange={(e) =>
+                                    updateFormState(
+                                      "charSubjectiveFilter",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="What do they notice first in a room? What do they ignore?"
+                                />
+                              </div>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  Voice Notes
+                                </label>
+                                <input
+                                  className="tool-form-input"
+                                  value={toolFormState.charVoiceNotes}
+                                  onChange={(e) =>
+                                    updateFormState(
+                                      "charVoiceNotes",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Speech patterns, vocabulary, rhythmic tendencies"
+                                />
+                              </div>
+                              <div
+                                className="tool-input-group"
+                                style={{ gridColumn: "1 / -1" }}
+                              >
+                                <label className="tool-input-label">
+                                  Ambivalent Agency
+                                </label>
+                                <textarea
+                                  className="tool-form-textarea"
+                                  value={toolFormState.charAmbivalentAgency}
+                                  onChange={(e) =>
+                                    updateFormState(
+                                      "charAmbivalentAgency",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="What morally gray choices are they permitted to make? What line won't they cross?"
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          {toolFormState.charGenMethod === "description" && (
+                            <div
+                              className="tool-input-group"
+                              style={{ gridColumn: "1 / -1" }}
+                            >
+                              <label className="tool-input-label">
+                                Character Background & Description
+                              </label>
+                              <textarea
+                                className="tool-form-textarea"
+                                value={toolFormState.charDescription}
+                                onChange={(e) =>
+                                  updateFormState(
+                                    "charDescription",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Describe their background, motivations, flaws, and personality..."
+                              />
+                            </div>
+                          )}
+
+                          {toolFormState.charGenMethod === "existing" && (
+                            <div
+                              className="tool-input-group"
+                              style={{ gridColumn: "1 / -1" }}
+                            >
+                              <label className="tool-input-label">
+                                Update Instructions
+                              </label>
+                              <textarea
+                                className="tool-form-textarea"
+                                value={toolFormState.charDescription}
+                                onChange={(e) =>
+                                  updateFormState(
+                                    "charDescription",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="What should change about this character? (e.g. Make them more paranoid after the betrayal)"
+                              />
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -1469,18 +1709,69 @@ export default function ChatPage() {
                       report.
                     </span>
                     <div className="tool-form-grid">
-                      <div className="tool-input-group">
-                        <label className="tool-input-label">Scene Text</label>
-                        <textarea
-                          className="tool-form-textarea"
-                          value={toolFormState.reviewText}
+                      <div
+                        className="tool-input-group"
+                        style={{ gridColumn: "1 / -1" }}
+                      >
+                        <label className="tool-input-label">
+                          Source Material
+                        </label>
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.reviewSource}
                           onChange={(e) =>
-                            updateFormState("reviewText", e.target.value)
+                            updateFormState("reviewSource", e.target.value)
                           }
-                          placeholder="Paste narrative scene prose here..."
-                        />
+                        >
+                          <option value="paste">Paste Text</option>
+                          <option value="draft">Select Workspace Draft</option>
+                        </select>
                       </div>
-                      <div className="tool-input-group">
+
+                      {toolFormState.reviewSource === "paste" ? (
+                        <div
+                          className="tool-input-group"
+                          style={{ gridColumn: "1 / -1" }}
+                        >
+                          <label className="tool-input-label">Scene Text</label>
+                          <textarea
+                            className="tool-form-textarea"
+                            value={toolFormState.reviewText}
+                            onChange={(e) =>
+                              updateFormState("reviewText", e.target.value)
+                            }
+                            placeholder="Paste narrative scene prose here..."
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          className="tool-input-group"
+                          style={{ gridColumn: "1 / -1" }}
+                        >
+                          <label className="tool-input-label">
+                            Workspace Draft
+                          </label>
+                          <select
+                            className="tool-form-select"
+                            value={toolFormState.reviewDraftId}
+                            onChange={(e) =>
+                              updateFormState("reviewDraftId", e.target.value)
+                            }
+                          >
+                            <option value="">-- Select Draft --</option>
+                            {activeStory?.drafts?.map((draft) => (
+                              <option key={draft.id} value={draft.id}>
+                                {draft.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div
+                        className="tool-input-group"
+                        style={{ gridColumn: "1 / -1" }}
+                      >
                         <label className="tool-input-label">
                           Scene Identifier
                         </label>
@@ -1548,20 +1839,74 @@ export default function ChatPage() {
                       (tension), oxytocin, or dopamine.
                     </span>
                     <div className="tool-form-grid">
-                      <div className="tool-input-group">
+                      <div
+                        className="tool-input-group"
+                        style={{ gridColumn: "1 / -1" }}
+                      >
                         <label className="tool-input-label">
-                          Original Scene Text
+                          Source Material
                         </label>
-                        <textarea
-                          className="tool-form-textarea"
-                          value={toolFormState.rewriteSceneText}
+                        <select
+                          className="tool-form-select"
+                          value={toolFormState.rewriteSource}
                           onChange={(e) =>
-                            updateFormState("rewriteSceneText", e.target.value)
+                            updateFormState("rewriteSource", e.target.value)
                           }
-                          placeholder="Prose to rewrite..."
-                        />
+                        >
+                          <option value="paste">Paste Text</option>
+                          <option value="draft">Select Workspace Draft</option>
+                        </select>
                       </div>
-                      <div className="tool-input-group">
+
+                      {toolFormState.rewriteSource === "paste" ? (
+                        <div
+                          className="tool-input-group"
+                          style={{ gridColumn: "1 / -1" }}
+                        >
+                          <label className="tool-input-label">
+                            Original Scene Text
+                          </label>
+                          <textarea
+                            className="tool-form-textarea"
+                            value={toolFormState.rewriteSceneText}
+                            onChange={(e) =>
+                              updateFormState(
+                                "rewriteSceneText",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Prose to rewrite..."
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          className="tool-input-group"
+                          style={{ gridColumn: "1 / -1" }}
+                        >
+                          <label className="tool-input-label">
+                            Workspace Draft
+                          </label>
+                          <select
+                            className="tool-form-select"
+                            value={toolFormState.rewriteDraftId}
+                            onChange={(e) =>
+                              updateFormState("rewriteDraftId", e.target.value)
+                            }
+                          >
+                            <option value="">-- Select Draft --</option>
+                            {activeStory?.drafts?.map((draft) => (
+                              <option key={draft.id} value={draft.id}>
+                                {draft.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div
+                        className="tool-input-group"
+                        style={{ gridColumn: "1 / -1" }}
+                      >
                         <label className="tool-input-label">Target Axis</label>
                         <select
                           className="tool-form-select"
