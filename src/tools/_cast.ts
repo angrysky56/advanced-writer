@@ -1,7 +1,17 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
-import { extractCharacterMeta, CharacterMeta } from "../ai/extract.js";
+import {
+  extractCharacterMeta,
+  formatAffectProfile,
+  CharacterMeta,
+} from "../ai/extract.js";
+
+// Appended to every character-generation prompt to keep profiles consistent and
+// free of conversational preamble (e.g. "Excellent. Based on the logline...").
+const FORMAT_RULES = `
+
+OUTPUT RULES: Respond with ONLY the character profile in clean markdown, beginning directly with the character's name as an H2 heading (## Name). Do NOT include any preamble, acknowledgement, or meta commentary (no "Here is", "Certainly", "Based on the...", etc.). Use consistent section headings: Core Desire, Archetype, Hamartia, Shadow, Moral Weakness, Panksepp Affect.`;
 
 export interface SeededCharacter {
   id: string;
@@ -11,7 +21,10 @@ export interface SeededCharacter {
 }
 
 function nameSlug(name: string): string {
-  return name.replace(/[^a-z0-9]+/gi, "_").toLowerCase().replace(/^_+|_+$/g, "");
+  return name
+    .replace(/[^a-z0-9]+/gi, "_")
+    .toLowerCase()
+    .replace(/^_+|_+$/g, "");
 }
 
 /**
@@ -33,7 +46,7 @@ export async function generateAndSeedCast(
 Give them a distinct proper NAME. Detail their core desires, archetype, hamartia (tragic flaw), shadow self, moral weakness, and Panksepp affect profile (e.g. SEEKING, FEAR, RAGE, PANIC_GRIEF, PLAY, CARE).`;
   const protagonistProfile = await aiRouter.generateCompletion({
     taskType: "generation",
-    systemPrompt: protagonistPrompt,
+    systemPrompt: protagonistPrompt + FORMAT_RULES,
     userMessage: "Generate the protagonist character profile.",
   });
 
@@ -45,7 +58,7 @@ Give them a distinct proper NAME. Detail their core desires, archetype, hamartia
 ${protagonistProfile}`;
   const costarProfile = await aiRouter.generateCompletion({
     taskType: "generation",
-    systemPrompt: costarPrompt,
+    systemPrompt: costarPrompt + FORMAT_RULES,
     userMessage: "Generate the co-star character profile.",
   });
 
@@ -61,7 +74,7 @@ Co-Star:
 ${costarProfile}`;
   const supportingProfile = await aiRouter.generateCompletion({
     taskType: "generation",
-    systemPrompt: supportingPrompt,
+    systemPrompt: supportingPrompt + FORMAT_RULES,
     userMessage: "Generate the supporting character profile.",
   });
 
@@ -82,13 +95,20 @@ ${costarProfile}`;
     if (usedSlugs.has(slug)) slug = `${slug}_${seeded.length + 1}`;
     usedSlugs.add(slug);
 
-    await workspaceExporter.saveCharacterProfile(storyName, slug, spec.profile);
+    // Append a consistent, parseable affect block so every profile carries real
+    // all-seven-system Panksepp scores in a uniform place (not name-hash noise).
+    const profileWithAffect = `${spec.profile.trim()}\n\n${formatAffectProfile(meta)}`;
+    await workspaceExporter.saveCharacterProfile(
+      storyName,
+      slug,
+      profileWithAffect,
+    );
 
     const id = `${storyName}_${slug}`;
     const now = new Date().toISOString();
     await neo4jStorage.createCharacterNode({
       id,
-      document: spec.profile,
+      document: profileWithAffect,
       metadata: {
         name: meta.name,
         archetype: meta.archetype,

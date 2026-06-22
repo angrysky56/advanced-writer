@@ -139,6 +139,8 @@ export default function ChatPage() {
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
   const [showModelConfig, setShowModelConfig] = useState<boolean>(false);
   const [jobs, setJobs] = useState<any[]>([]);
+  const [jobDone, setJobDone] = useState<string | null>(null);
+  const prevRunningRef = useRef<Set<string>>(new Set());
 
   const { messages, sendMessage, status } = useChat();
   const [input, setInput] = useState("");
@@ -262,6 +264,28 @@ export default function ChatPage() {
     const t = setInterval(load, 4000);
     return () => clearInterval(t);
   }, []);
+
+  // Detect running -> finished transitions to show a transient "done" toast
+  // that clears itself (so the indicator is never permanent), while the live
+  // count below always reflects every currently-running task.
+  useEffect(() => {
+    const running = new Set(
+      jobs.filter((j) => j.status === "running").map((j) => j.id),
+    );
+    const finished = [...prevRunningRef.current].filter(
+      (id) => !running.has(id),
+    );
+    if (finished.length > 0) {
+      const j = jobs.find((x) => x.id === finished[finished.length - 1]);
+      if (j) {
+        setJobDone(`${j.tool} ${j.status}`);
+        const t = setTimeout(() => setJobDone(null), 7000);
+        prevRunningRef.current = running;
+        return () => clearTimeout(t);
+      }
+    }
+    prevRunningRef.current = running;
+  }, [jobs]);
 
   // Automatically re-fetch workspace when a tool completes execution (isLoading changes from true to false)
   useEffect(() => {
@@ -730,13 +754,15 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
 
   return (
     <div className="dashboard-layout">
-      {/* Background-job indicator (cosmetic) */}
-      {jobs.length > 0 && (
+      {/* Background-job indicator (cosmetic). Shows only while work is active,
+          plus a brief self-clearing toast on completion — never permanent. */}
+      {(runningJobs.length > 0 || jobDone) && (
         <div
-          title={jobs
-            .slice(0, 6)
-            .map((j) => `${j.id} ${j.tool}: ${j.status}`)
-            .join("\n")}
+          title={
+            runningJobs.length > 0
+              ? runningJobs.map((j) => `${j.id} ${j.tool}: running`).join("\n")
+              : undefined
+          }
           style={{
             position: "fixed",
             top: 12,
@@ -747,6 +773,9 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
             fontSize: "0.72rem",
             fontWeight: 600,
             color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
             background: runningJobs.length
               ? "rgba(176,124,32,0.92)"
               : "rgba(40,120,64,0.92)",
@@ -755,9 +784,11 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
             boxShadow: "0 4px 14px rgba(0,0,0,0.3)",
           }}
         >
-          {runningJobs.length
-            ? `⏳ ${runningJobs.length} job${runningJobs.length > 1 ? "s" : ""} running…`
-            : `✓ ${jobs[0].tool} ${jobs[0].status}`}
+          {runningJobs.length > 0
+            ? `⏳ ${runningJobs.length} running: ${runningJobs
+                .map((j) => j.tool)
+                .join(", ")}`
+            : `✓ ${jobDone}`}
         </div>
       )}
 
@@ -881,29 +912,32 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                   </p>
 
                   <div className="panksepp-container">
-                    <div className="panksepp-bar">
-                      <span>SEEKING</span>
-                      <div className="panksepp-bar-bg">
-                        <div
-                          className="panksepp-bar-fill"
-                          style={{ width: `${char.panksepp.SEEKING * 10}%` }}
-                        ></div>
-                      </div>
-                      <span>{char.panksepp.SEEKING}/10</span>
-                    </div>
-                    <div className="panksepp-bar">
-                      <span>FEAR</span>
-                      <div className="panksepp-bar-bg">
-                        <div
-                          className="panksepp-bar-fill"
-                          style={{
-                            width: `${char.panksepp.FEAR * 10}%`,
-                            background: "var(--cortisol)",
-                          }}
-                        ></div>
-                      </div>
-                      <span>{char.panksepp.FEAR}/10</span>
-                    </div>
+                    {Object.entries(char.panksepp).map(([affect, val]) => {
+                      let barColor = "var(--accent)";
+                      if (affect === "FEAR") barColor = "var(--cortisol)";
+                      else if (affect === "RAGE") barColor = "#ef4444";
+                      else if (affect === "SEEKING")
+                        barColor = "var(--dopamine)";
+                      else if (affect === "CARE") barColor = "var(--oxytocin)";
+                      else if (affect === "PLAY") barColor = "#10b981";
+                      else if (affect === "PANIC_GRIEF") barColor = "#f59e0b";
+                      else if (affect === "LUST") barColor = "#ec4899";
+                      return (
+                        <div className="panksepp-bar" key={affect}>
+                          <span>{affect.replace("_", "/")}</span>
+                          <div className="panksepp-bar-bg">
+                            <div
+                              className="panksepp-bar-fill"
+                              style={{
+                                width: `${(Number(val) || 0) * 10}%`,
+                                background: barColor,
+                              }}
+                            ></div>
+                          </div>
+                          <span>{val}/10</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -2821,7 +2855,9 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                             barColor = "var(--dopamine)";
                           if (affect === "CARE") barColor = "var(--oxytocin)";
                           if (affect === "PLAY") barColor = "#10b981";
-                          if (affect === "PANIC") barColor = "#f59e0b";
+                          if (affect === "PANIC" || affect === "PANIC_GRIEF")
+                            barColor = "#f59e0b";
+                          if (affect === "LUST") barColor = "#ec4899";
 
                           return (
                             <div

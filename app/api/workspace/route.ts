@@ -82,39 +82,38 @@ function extractArchetype(content: string): string {
   return "Archetype";
 }
 
+// All seven Panksepp primary-process systems. Reads real scores from the
+// "Affect Profile" block written into each character profile; falls back to a
+// name-hash only if a profile predates that block.
 function extractPanksepp(
   content: string,
   hash: number,
 ): Record<string, number> {
-  let seeking = 5 + (hash % 5);
-  let fear = 2 + (hash % 8);
-  let rage = 1 + (hash % 6);
-  let panic = 2 + (hash % 7);
-  let play = 4 + (hash % 6);
-  let care = 3 + (hash % 7);
-
-  const seekingMatch = content.match(/seek(?:ing)?\s*:\s*(\d+)/i);
-  const fearMatch = content.match(/fear\s*:\s*(\d+)/i);
-  const rageMatch = content.match(/rage\s*:\s*(\d+)/i);
-  const panicMatch = content.match(/panic\s*:\s*(\d+)/i);
-  const playMatch = content.match(/play\s*:\s*(\d+)/i);
-  const careMatch = content.match(/care\s*:\s*(\d+)/i);
-
-  if (seekingMatch) seeking = parseInt(seekingMatch[1], 10);
-  if (fearMatch) fear = parseInt(fearMatch[1], 10);
-  if (rageMatch) rage = parseInt(rageMatch[1], 10);
-  if (panicMatch) panic = parseInt(panicMatch[1], 10);
-  if (playMatch) play = parseInt(playMatch[1], 10);
-  if (careMatch) care = parseInt(careMatch[1], 10);
-
-  return {
-    SEEKING: seeking,
-    FEAR: fear,
-    RAGE: rage,
-    PANIC: panic,
-    PLAY: play,
-    CARE: care,
+  const fallback: Record<string, number> = {
+    SEEKING: 5 + (hash % 5),
+    FEAR: 2 + (hash % 8),
+    RAGE: 1 + (hash % 6),
+    LUST: 1 + (hash % 6),
+    CARE: 3 + (hash % 7),
+    PANIC_GRIEF: 2 + (hash % 7),
+    PLAY: 4 + (hash % 6),
   };
+  const patterns: Record<string, RegExp> = {
+    SEEKING: /seek(?:ing)?\s*:\s*(\d+)/i,
+    FEAR: /fear\s*:\s*(\d+)/i,
+    RAGE: /rage\s*:\s*(\d+)/i,
+    LUST: /lust\s*:\s*(\d+)/i,
+    CARE: /care\s*:\s*(\d+)/i,
+    PANIC_GRIEF: /panic(?:[_ ]?grief)?\s*:\s*(\d+)/i,
+    PLAY: /play\s*:\s*(\d+)/i,
+  };
+
+  const result: Record<string, number> = {};
+  for (const key of Object.keys(fallback)) {
+    const m = content.match(patterns[key]);
+    result[key] = m ? parseInt(m[1], 10) : fallback[key];
+  }
+  return result;
 }
 
 function getCleanSummary(content: string): string {
@@ -140,6 +139,14 @@ function getCleanSummary(content: string): string {
       trimmed.startsWith("Character Name:") ||
       trimmed.startsWith("Archetype:") ||
       trimmed.startsWith("Jungian Archetype:")
+    )
+      continue;
+
+    // Skip leaked LLM preamble so it never becomes the card summary.
+    if (
+      /^(excellent|certainly|sure|here(?:'s| is)\b|of course|absolutely|okay\b|ok\b|great[,!.]|based on the)/i.test(
+        trimmed,
+      )
     )
       continue;
 

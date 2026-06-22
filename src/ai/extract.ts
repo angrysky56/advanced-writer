@@ -11,7 +11,10 @@ export function safeParseJson<T = any>(raw: string): T | null {
   if (!raw) return null;
 
   // Strip code fences if present.
-  let text = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  let text = raw
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
   // Narrow to the outermost JSON object if there is surrounding prose.
   const first = text.indexOf("{");
@@ -27,6 +30,29 @@ export function safeParseJson<T = any>(raw: string): T | null {
   }
 }
 
+/** Panksepp's seven primary affective systems (the drive layer). */
+export const PANKSEPP_SYSTEMS = [
+  "SEEKING",
+  "FEAR",
+  "RAGE",
+  "LUST",
+  "CARE",
+  "PANIC_GRIEF",
+  "PLAY",
+] as const;
+
+/** Plutchik's eight primary emotions (the felt-emotion layer). */
+export const PLUTCHIK_EMOTIONS = [
+  "joy",
+  "trust",
+  "fear",
+  "surprise",
+  "sadness",
+  "disgust",
+  "anger",
+  "anticipation",
+] as const;
+
 export interface CharacterMeta {
   name: string;
   archetype: string;
@@ -36,6 +62,36 @@ export interface CharacterMeta {
   individuation_state: string;
   role: string;
   panksepp_primary: string;
+  /** Score 1-10 for each of the seven Panksepp systems (drives). */
+  panksepp: Record<string, number>;
+  /** Score 1-10 for each of Plutchik's eight primary emotions (felt state). */
+  plutchik: Record<string, number>;
+}
+
+function clampScore(v: any, fallback = 5): number {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(10, Math.max(1, n));
+}
+
+/**
+ * Render a consistent, machine-parseable affect block to append to every saved
+ * character profile. This guarantees the UI reads real, uniform Panksepp scores
+ * (all seven systems) regardless of how the prose above is formatted.
+ */
+export function formatAffectProfile(meta: CharacterMeta): string {
+  const p = meta.panksepp || {};
+  const e = meta.plutchik || {};
+  const pankseppLines = PANKSEPP_SYSTEMS.map(
+    (k) => `- ${k}: ${clampScore(p[k])}`,
+  ).join("\n");
+  const plutchikLines = PLUTCHIK_EMOTIONS.map(
+    (k) => `- ${k}: ${clampScore(e[k])}`,
+  ).join("\n");
+  return (
+    `## Affect Profile (Panksepp drives, 1-10)\n\nPrimary system: ${meta.panksepp_primary}\n\n${pankseppLines}\n\n` +
+    `## Emotional State (Plutchik, 1-10)\n\n${plutchikLines}\n`
+  );
 }
 
 /**
@@ -59,9 +115,11 @@ export async function extractCharacterMeta(
   "moral_weakness": "their core moral weakness",
   "individuation_state": "one of: Pre-Awareness, Awakening, Confrontation, Integration, Transcendence",
   "role": "their narrative role (e.g. Protagonist, Antagonist, Mentor)",
-  "panksepp_primary": "one of: SEEKING, FEAR, RAGE, PANIC_GRIEF, PLAY, CARE, LUST"
+  "panksepp_primary": "the single dominant system: one of SEEKING, FEAR, RAGE, PANIC_GRIEF, PLAY, CARE, LUST",
+  "panksepp": { "SEEKING": 5, "FEAR": 5, "RAGE": 5, "LUST": 5, "CARE": 5, "PANIC_GRIEF": 5, "PLAY": 5 },
+  "plutchik": { "joy": 5, "trust": 5, "fear": 5, "surprise": 5, "sadness": 5, "disgust": 5, "anger": 5, "anticipation": 5 }
 }
-Do not include markdown formatting or commentary.`;
+For "panksepp", score EVERY one of the seven systems 1-10 by how strongly it DRIVES this character (the primary should be highest). For "plutchik", score the character's baseline FELT emotion on all eight from 1-10. Do not include markdown formatting or commentary.`;
 
   let parsed: Partial<CharacterMeta> | null = null;
   try {
@@ -83,14 +141,16 @@ Do not include markdown formatting or commentary.`;
     hamartia: (parsed?.hamartia || "Unknown").toString().trim(),
     shadow: (parsed?.shadow || "Unknown").toString().trim(),
     moral_weakness: (parsed?.moral_weakness || "Unknown").toString().trim(),
-    individuation_state: (
-      parsed?.individuation_state || "Pre-Awareness"
-    )
+    individuation_state: (parsed?.individuation_state || "Pre-Awareness")
       .toString()
       .trim(),
     role: (parsed?.role || fallbackRole).toString().trim(),
-    panksepp_primary: (parsed?.panksepp_primary || "SEEKING")
-      .toString()
-      .trim(),
+    panksepp_primary: (parsed?.panksepp_primary || "SEEKING").toString().trim(),
+    panksepp: Object.fromEntries(
+      PANKSEPP_SYSTEMS.map((k) => [k, clampScore(parsed?.panksepp?.[k])]),
+    ),
+    plutchik: Object.fromEntries(
+      PLUTCHIK_EMOTIONS.map((k) => [k, clampScore(parsed?.plutchik?.[k])]),
+    ),
   };
 }

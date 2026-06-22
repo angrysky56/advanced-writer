@@ -189,6 +189,39 @@ export class Neo4jStorage {
     }
   }
 
+  /**
+   * Append a per-scene affect snapshot (Panksepp drives + Plutchik emotions) to
+   * a character's bounded timeline, so emotional arcs can be reconstructed
+   * across the story. Capped to the last 40 snapshots to avoid unbounded growth.
+   */
+  async appendAffectSnapshot(
+    storyId: string,
+    characterName: string,
+    sceneId: string,
+    panksepp: Record<string, number>,
+    plutchik: Record<string, number>,
+  ) {
+    const session = this.getSession();
+    try {
+      const snapshot = JSON.stringify({
+        scene: sceneId,
+        panksepp: panksepp || {},
+        plutchik: plutchik || {},
+        at: new Date().toISOString(),
+      });
+      await session.run(
+        `
+        MATCH (c:Character {name: $name})
+        WHERE $storyId IN c.story_ids
+        SET c.affect_log = (coalesce(c.affect_log, []) + $snapshot)[-40..]
+        `,
+        { name: characterName, storyId, snapshot },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
   async addEntity(
     storyId: string,
     entityName: string,

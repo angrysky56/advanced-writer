@@ -172,11 +172,16 @@ CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for
     const continuityPrompt = `You are a strict data extractor. Analyze the new scene and extract continuity state changes.
 Output ONLY valid JSON matching this structure:
 {
-  "character_updates": [ { "name": "Character Name", "arc_progression": "What changed for them in this scene" } ],
+  "character_updates": [ {
+    "name": "Character Name",
+    "arc_progression": "What changed for them in this scene",
+    "panksepp": { "SEEKING": 1-10, "FEAR": 1-10, "RAGE": 1-10, "LUST": 1-10, "CARE": 1-10, "PANIC_GRIEF": 1-10, "PLAY": 1-10 },
+    "plutchik": { "joy": 1-10, "trust": 1-10, "fear": 1-10, "surprise": 1-10, "sadness": 1-10, "disgust": 1-10, "anger": 1-10, "anticipation": 1-10 }
+  } ],
   "new_entities": [ { "name": "Entity Name", "type": "Animal/Prop/Location", "description": "Brief description" } ],
   "new_relationships": [ { "subject": "Name1", "relation": "OWNS/KNOWS/AT", "object": "Name2" } ]
 }
-If no updates, return empty arrays. DO NOT include markdown formatting.
+For each character PRESENT in this scene, give their affect readings AS OF THIS SCENE (how this scene's events have moved them) so their emotional arc can be tracked over time. If no updates, return empty arrays. DO NOT include markdown formatting.
 Scene:
 ${newDraft}`;
     const continuityExtraction = await aiRouter.generateCompletion({
@@ -198,6 +203,17 @@ ${newDraft}`;
               update.name,
               update.arc_progression || "",
             );
+            // Record this scene's affect reading so the character's emotional
+            // arc (Panksepp + Plutchik) is tracked across the whole story.
+            if (update.panksepp || update.plutchik) {
+              await neo4jStorage.appendAffectSnapshot(
+                story_id,
+                update.name,
+                next_scene_id,
+                update.panksepp || {},
+                update.plutchik || {},
+              );
+            }
           }
         }
         if (Array.isArray(stateData.new_entities)) {

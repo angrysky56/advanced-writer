@@ -1,7 +1,7 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
-import { extractCharacterMeta } from "../ai/extract.js";
+import { extractCharacterMeta, formatAffectProfile } from "../ai/extract.js";
 
 export const developCharacterDef = {
   name: "develop_character",
@@ -62,7 +62,9 @@ export async function executeDevelopCharacter(args: any) {
     if (action === "create") {
       if (!name) return text("Error: 'name' is required to create a character.", true);
 
-      const charPrompt = `You are a character psychology expert. Generate a deeply flawed Jungian character profile for a character named ${name}${archetype ? ` with the ${archetype} archetype` : ""}. Detail their core desires, archetype, hamartia, shadow self, moral weakness, and Panksepp affect profile.`;
+      const charPrompt = `You are a character psychology expert. Generate a deeply flawed Jungian character profile for a character named ${name}${archetype ? ` with the ${archetype} archetype` : ""}. Detail their core desires, archetype, hamartia, shadow self, moral weakness, and Panksepp affect profile.
+
+OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directly with the character's name as an H2 heading (## ${name}). No preamble, acknowledgement, or meta commentary.`;
       const characterDoc = await aiRouter.generateCompletion({
         taskType: "generation",
         systemPrompt: charPrompt,
@@ -70,18 +72,21 @@ export async function executeDevelopCharacter(args: any) {
       });
 
       const slug = nameSlug(name);
+
+      // Extract real traits, then append a consistent affect block (all seven
+      // Panksepp systems) so the saved profile is uniform and parseable.
+      const meta = await extractCharacterMeta(characterDoc, "Supporting");
+      const docWithAffect = `${characterDoc.trim()}\n\n${formatAffectProfile(meta)}`;
       await workspaceExporter.saveCharacterProfile(
         story_name,
         slug,
-        characterDoc,
+        docWithAffect,
       );
 
-      // Extract real traits from the profile rather than storing placeholders.
-      const meta = await extractCharacterMeta(characterDoc, "Supporting");
       const now = new Date().toISOString();
       await neo4jStorage.createCharacterNode({
         id: `${story_name}_${slug}`,
-        document: characterDoc,
+        document: docWithAffect,
         metadata: {
           name, // user-provided name is authoritative
           archetype: archetype || meta.archetype,
