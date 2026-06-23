@@ -6,7 +6,7 @@ import { generateAndSeedCast } from "./_cast.js";
 import { recordSceneTracking } from "./_tracking.js";
 import { executeBuildWorldBible } from "./build-world-bible.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
-import { loadCraftDirectives } from "../ai/craft.js";
+import { loadCraftDirectives, NAMING_RULE } from "../ai/craft.js";
 
 export const createNarrativeDef = {
   name: "create_narrative",
@@ -133,11 +133,15 @@ ${loadCraftDirectives()}
 ${worldBible || "(none yet)"}
 
 CANON CAST — use these characters by name; do NOT invent new named primary characters:
-${castBrief}`;
+${castBrief}
+
+${NAMING_RULE}`;
     const draft = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt: draftPrompt,
-      userMessage: "Write Scene 1.",
+      userMessage: `Write Scene 1. Use these EXACT character names — do NOT invent or rename anyone: ${cast
+        .map((c) => `${c.meta.name} (${c.meta.role})`)
+        .join("; ")}. The point-of-view protagonist is ${cast[0]?.meta?.name || "the protagonist"} — refer to her/him by that exact name throughout.`,
     });
     await workspaceExporter.saveDraft(storyName, "scene_1", draft);
 

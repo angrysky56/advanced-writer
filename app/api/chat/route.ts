@@ -108,7 +108,7 @@ export async function POST(req: Request) {
     messages: modelMessages,
     system:
       "You are an autonomous AI Novel Writing Copilot. You orchestrate the tools to write, review, and revise stories. " +
-      "If the user asks for Draft 3, and Draft 2 exists, you should run storyscope_final_review on Draft 2, and then run apply_storyscope_revisions to generate Draft 3. " +
+      "apply_storyscope_revisions requires a StoryScope review to exist; it auto-increments the draft version. Do NOT re-run storyscope_final_review if a review (executive summary + lens reports) already exists for the project — only run it when none exists yet, then apply. Never run a review you already have. " +
       "If they ask you to research something, use web_search. If they ask to expand a novel from scratch, use expand_to_novel. " +
       "You have access to 11 narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.",
     // Effectively unlimited agent autonomy. A low cap here silently halts

@@ -3,7 +3,7 @@ import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
-import { loadCraftDirectives } from "../ai/craft.js";
+import { loadCraftDirectives, NAMING_RULE } from "../ai/craft.js";
 import { recordSceneTracking, buildScratchpadContext } from "./_tracking.js";
 
 export const continueNarrativeDef = {
@@ -161,14 +161,19 @@ ${user_direction || "Continue the narrative naturally, maintaining the tone, cha
 
 Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.
 Use ONLY the canon cast above for named characters — develop them, do not replace them with newly-invented primary characters.
+${NAMING_RULE}
 Honor the CHARACTER STATE SHEETS: each character's location, what they know, what they are holding, and their relationships must stay consistent with their recorded state unless this scene deliberately changes them (and if it does, the change must be shown).
 Obey the WORLD BIBLE's CORE RULES & CONSTRAINTS absolutely — the world's logic (how its central mechanic works, its limits and costs) is canon law and must never be contradicted.
 CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for AI dialogue or output. If CodeWhisper communicates in code, integrate it naturally into the prose (e.g., using italics or standard quotes). The final output must read like a traditional novel, not a GitHub README.`;
 
+    const castNames =
+      (storyState.characters || [])
+        .map((c: any) => `${c.name}${c.role ? ` (${c.role})` : ""}`)
+        .join("; ") || "(use the canon cast above)";
     const newDraft = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt,
-      userMessage: `Write the new scene (${next_scene_id}).`,
+      userMessage: `Write the new scene (${next_scene_id}). Use these EXACT character names — do NOT invent or rename anyone: ${castNames}.`,
     });
 
     await workspaceExporter.saveDraft(

@@ -17,6 +17,13 @@ const CRAFT_FILES = [
   "storyscope-anti-patterns.md",
 ];
 
+/**
+ * Anti-cliché naming rule, injected EVERYWHERE a name can be created — cast
+ * generation AND scene writing — so the prose never falls back to the AI-default
+ * register (the "Elara Voss" attractor) even when inventing an incidental name.
+ */
+export const NAMING_RULE = `NAMING: Never use the AI-default name register. Do NOT name any character Elara, Elinor, Lyra, Aria, Kael, Seraphina, Thalia, Cassius, Lior, or use surnames like Voss, Thorne, Vance, Blackwood, Hart, Ashford, Vale. Use the CANON CAST names exactly as given. If you must name an incidental character not in the cast, invent a name with concrete cultural, regional, and period specificity for THIS story's setting — never a generic fantasy default.`;
+
 let cached: string | null = null;
 
 export function loadCraftDirectives(): string {

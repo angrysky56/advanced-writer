@@ -1,10 +1,11 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
+import { safeParseJson } from "../ai/extract.js";
 
 export const applyStoryscopeRevisionsDef = {
   name: "apply_storyscope_revisions",
   description:
-    "Executes a massive Draft 2 background pass. Reads the StoryScope Executive Summary and systematically rewrites every drafted scene to aggressively apply the structural To-Do list. Non-destructive: writes to a new draft version.",
+    "Builds the next draft version from the StoryScope review. Carries every scene forward, then SELECTIVELY rewrites only the scenes the critique flags (most scenes are left untouched). Non-destructive and auto-incrementing (v1->v2->v3...).",
   inputSchema: {
     type: "object",
     properties: {
@@ -22,7 +23,7 @@ export const applyStoryscopeRevisionsDef = {
       async: {
         type: "boolean",
         description:
-          "Run in the background and return a job id immediately (recommended — rewrites every scene). Poll with check_job.",
+          "Run in the background and return a job id immediately (recommended for long manuscripts). Poll with check_job.",
         default: false,
       },
     },
@@ -59,82 +60,203 @@ export async function executeApplyStoryscopeRevisions(args: any) {
             .map((r) => `## LENS: ${r.aspect.toUpperCase()}\n${r.content}`)
             .join("\n\n")
         : "(no specialist lens reports found)";
-    if (!executiveSummary) {
+
+    // A review exists if EITHER the executive summary OR the lens reports are on
+    // disk — don't falsely report "no review" when the reports clearly exist.
+    const hasReview =
+      !!(executiveSummary && executiveSummary.trim()) || lensReports.length > 0;
+    if (!hasReview) {
       return {
         content: [
           {
             type: "text",
-            text: `Error: No StoryScope Executive Summary found for ${story_id}. Run storyscope_final_review first.`,
+            text: `Error: No StoryScope review found for ${story_id} (neither an executive summary nor lens reports exist on disk). Run storyscope_final_review first.`,
           },
         ],
         isError: true,
       };
     }
+    const summaryContext =
+      executiveSummary && executiveSummary.trim()
+        ? executiveSummary
+        : "(No executive summary file found — applying the specialist lens reports directly.)";
 
-    // 2. List all source drafts
-    const draftFiles = await workspaceExporter.listDrafts(
+    // 2. Canonical scene set = the COMPLETE original (v1) UNION the source
+    // version, so a partial source can never silently drop scenes.
+    const baseFiles = await workspaceExporter.listDrafts(story_id, "v1");
+    const sourceFiles = await workspaceExporter.listDrafts(
       story_id,
       source_version,
     );
-    if (draftFiles.length === 0) {
+    const sceneIds = Array.from(
+      new Set([...baseFiles, ...sourceFiles].map((f) => f.replace(".md", ""))),
+    ).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+    );
+    if (sceneIds.length === 0) {
       return {
         content: [
-          {
-            type: "text",
-            text: `Error: No drafts found for ${story_id} (version ${source_version}).`,
-          },
+          { type: "text", text: `Error: No drafts found for ${story_id}.` },
         ],
         isError: true,
       };
     }
 
-    const totalScenes = draftFiles.length;
-
-    // 3. Rewrite loop — sequential, reading from source_version and writing the
-    // rewritten scene to target_version so Draft 1 is never overwritten.
-    for (let i = 0; i < totalScenes; i++) {
-      const fileName = draftFiles[i];
-      const sceneId = fileName.replace(".md", "");
-
-      const sceneText = await workspaceExporter.readDraft(
+    // 3. STREAM each scene forward into the new version (copy as-is) and collect
+    // a short opening excerpt for the planner. No whole-book memory buffer:
+    // copies go disk-to-disk; flagged scenes are re-read individually later.
+    const excerpts: { sceneId: string; excerpt: string }[] = [];
+    for (const sceneId of sceneIds) {
+      let text = await workspaceExporter.readDraft(
         story_id,
         sceneId,
         source_version,
       );
-      if (!sceneText) continue;
+      if (!text) text = await workspaceExporter.readDraft(story_id, sceneId, "v1");
+      if (!text) continue;
+      await workspaceExporter.saveDraft(story_id, sceneId, text, target_version);
+      excerpts.push({
+        sceneId,
+        excerpt: text.slice(0, 400).replace(/\s+/g, " ").trim(),
+      });
+    }
+    if (excerpts.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: no scenes available to revise for ${story_id}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
 
-      const systemPrompt = `You are a ruthless, brilliant MFA-level Editor executing "Draft 2".
-You have been given a massive structural Executive Summary for the entire novel.
-Your task is to rewrite the provided scene to aggressively apply the To-Do list instructions.
+    // 4. PLAN: one call to decide WHICH scenes actually need revision (most do
+    // not) and give each a specific directive — so we never rewrite the whole book.
+    const planPrompt = `You are an editorial planner. Given the StoryScope critique and the list of scenes (id :: opening excerpt), decide which scenes genuinely NEED revision for the next draft, and give each a specific directive. Scenes that already work should NOT be listed. Be selective — flag only what the critique actually calls for. Output ONLY JSON:
+{ "revisions": [ { "scene_id": "scene_3", "directive": "the specific change this scene needs" } ] }
 
-=== EXECUTIVE SUMMARY (DRAFT 2 TO-DO LIST — the priorities) ===
-${executiveSummary}
+=== EXECUTIVE SUMMARY ===
+${summaryContext}
 
-=== SPECIALIST LENS REPORTS (the full, specific critique — apply the granular notes relevant to THIS scene) ===
+=== SPECIALIST LENS REPORTS ===
 ${lensContext}
 
-=== INSTRUCTIONS ===
-- Read the scene below.
-- Look at the Executive Summary. If it says "Cut every third 'as if'", do it. If it says "Deepen the social world", add a secondary character reaction if appropriate.
-- You must rewrite the entire scene from start to finish.
-- DO NOT summarize. Output the fully rewritten scene prose.
-- CRITICAL CONTINUITY RULE: Do NOT "correct" intentional stylistic misspellings, character voice quirks, or code snippets. Treat technical terms and stylistic choices as canon.`;
-
-      const rewrittenScene = await aiRouter.generateCompletion({
-        taskType: "generation",
-        systemPrompt: systemPrompt,
-        userMessage: `Here is the Draft 1 scene. Rewrite it completely for Draft 2.\n\n=== DRAFT 1 SCENE ===\n${sceneText}`,
+=== SCENES ===
+${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
+    let plan: any = null;
+    try {
+      const planResp = await aiRouter.generateCompletion({
+        taskType: "diagnostic",
+        systemPrompt: planPrompt,
+        userMessage: "Output the revision plan as JSON.",
       });
+      plan = safeParseJson<any>(planResp);
+    } catch {
+      plan = null;
+    }
+    const directives = new Map<string, string>();
+    if (plan && Array.isArray(plan.revisions)) {
+      for (const r of plan.revisions) {
+        if (r?.scene_id)
+          directives.set(
+            String(r.scene_id),
+            r.directive || "Apply the StoryScope critique relevant to this scene.",
+          );
+      }
+    }
 
+    // Already carried everything forward; if nothing was flagged, finalize as-is.
+    if (directives.size === 0) {
+      const compiled0 = await workspaceExporter.readAllDrafts(
+        story_id,
+        target_version,
+      );
+      await workspaceExporter.saveManuscript(story_id, compiled0, target_version);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${target_version} created from ${source_version} (${excerpts.length} scenes carried forward). The planner flagged NO scenes as needing revision, so nothing was rewritten. If you expected changes, re-run storyscope_final_review or tell me which scenes to target.`,
+          },
+        ],
+      };
+    }
+
+    // 5. Revise ONLY the flagged scenes, in place. Retry; on persistent failure,
+    // abort with the reason — every scene stays present (copies + successful
+    // revisions), so nothing is lost.
+    const MAX_ATTEMPTS = 3;
+    let revisedCount = 0;
+    for (const sceneId of sceneIds) {
+      const directive = directives.get(sceneId);
+      if (!directive) continue; // not flagged — already carried forward as-is
+
+      const sceneText = await workspaceExporter.readDraft(
+        story_id,
+        sceneId,
+        target_version,
+      );
+      if (!sceneText) continue;
+
+      const systemPrompt = `You are a brilliant MFA-level editor revising ONE scene for the next draft. Apply the specific directive below, informed by the overall critique. Rewrite the entire scene from start to finish; output the full revised prose only. CRITICAL: do not "correct" intentional stylistic choices, character voice quirks, or technical terms.
+
+=== THIS SCENE'S REVISION DIRECTIVE ===
+${directive}
+
+=== OVERALL CRITIQUE (context) ===
+${summaryContext}`;
+
+      let revised = "";
+      let lastError = "model returned empty output";
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const out = await aiRouter.generateCompletion({
+            taskType: "generation",
+            systemPrompt,
+            userMessage: `Revise this scene per the directive.\n\n=== SCENE ===\n${sceneText}`,
+          });
+          if (out && out.trim()) {
+            revised = out;
+            break;
+          }
+          lastError = "model returned empty output";
+        } catch (e: any) {
+          lastError = e?.message || String(e);
+        }
+        if (attempt < MAX_ATTEMPTS)
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+
+      if (!revised) {
+        // Abort: every scene is still present (copies + revisions done so far);
+        // recompile so the draft is readable, and report the failure honestly.
+        const partial = await workspaceExporter.readAllDrafts(
+          story_id,
+          target_version,
+        );
+        await workspaceExporter.saveManuscript(story_id, partial, target_version);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Revision ABORTED at ${sceneId} after ${MAX_ATTEMPTS} attempts: ${lastError}. ${revisedCount} of ${directives.size} flagged scene(s) were revised first; ${target_version} holds every scene (revised + originals) but the revision is INCOMPLETE. If this was a transient connection issue, rerun to continue; otherwise the model could not revise this scene.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       await workspaceExporter.saveDraft(
         story_id,
         sceneId,
-        rewrittenScene,
+        revised,
         target_version,
       );
+      revisedCount++;
     }
 
-    // 4. Compile the new version's manuscript programmatically (no truncation).
+    // 6. Recompile the new version's manuscript.
     const allDrafts = await workspaceExporter.readAllDrafts(
       story_id,
       target_version,
@@ -145,7 +267,7 @@ ${lensContext}
       content: [
         {
           type: "text",
-          text: `Draft 2 complete! Applied the Executive Summary to ${totalScenes} scenes. Originals (${source_version}) are untouched; the new draft and manuscript were saved under version ${target_version}.`,
+          text: `Revision complete. ${target_version} written from ${source_version}: ${revisedCount} of ${sceneIds.length} scenes revised (the rest carried forward unchanged — the critique didn't flag them). Manuscript recompiled; originals preserved.`,
         },
       ],
     };
