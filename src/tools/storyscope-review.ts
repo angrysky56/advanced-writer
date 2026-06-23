@@ -106,19 +106,26 @@ export async function executeStoryscopeFinalReview(args: any) {
       const report = await aiRouter.generateCompletion({
         taskType: "diagnostic",
         systemPrompt: modifiedPrompt,
-        userMessage: `You are evaluating a manuscript against its foundational "Canon" documents.
-Identify any discrepancies, character arc failures, or continuity errors based on the World Bible and Graph State.
+        userMessage: `You are an expert editor reviewing a FINISHED manuscript. The Architecture Brief, World Bible, and Graph State below are EARLY PLANNING DRAFTS — reference material, NOT binding law. The manuscript is the living work and the AUTHOR'S INTENT IS PRIMARY. The plan serves the story, never the other way around.
 
-=== ARCHITECTURE BRIEF ===
+Apply this aspect's framework to the manuscript and separate your findings into two clearly labelled categories:
+
+1. CRAFT ISSUES — genuine problems INSIDE the manuscript: places where the story contradicts ITSELF, arcs that don't pay off, pacing or clarity failures, weak execution. These are real and should be fixed.
+
+2. CANON DIVERGENCE — places where the manuscript departs from the planning documents. For EACH divergence, judge whether the manuscript's choice is as good or BETTER. If it is, do NOT call it an error — recommend UPDATING the planning document to match the manuscript. Only flag a divergence as a problem when it makes the STORY ITSELF worse or internally incoherent — never merely because it disagrees with the outline.
+
+Do not penalize the manuscript for improving on its own plan. Be brutal about craft; be generous about intent.
+
+=== ARCHITECTURE BRIEF (planning draft — not law) ===
 ${architecture}
 
-=== WORLD BIBLE ===
+=== WORLD BIBLE (planning draft — not law) ===
 ${worldBible}
 
 === NEO4J GRAPH STATE (CHARACTERS & ENTITIES) ===
 ${graphStateContext}
 
-=== FINAL MANUSCRIPT ===
+=== FINAL MANUSCRIPT (the living work — primary) ===
 ${manuscript}`,
       });
 
@@ -152,13 +159,17 @@ ${manuscript}`,
     // Synthesize Executive Summary
     const synthesisPrompt = `You are the Executive Editor-in-Chief. Your team of specialist dramaturgs and structuralists have provided deep-dive reports on the manuscript from multiple distinct analytical lenses (Plot, Agents, Perspective, etc.).
 
-Read all of their reports and synthesize them into a single, cohesive "Executive Summary."
-Your summary must:
-1. Identify the manuscript's 3 greatest narrative strengths.
-2. Identify the manuscript's 3 most glaring structural or stylistic weaknesses.
-3. Provide a prioritized, actionable "To-Do List" for Draft 2.
+GUIDING PRINCIPLE: the manuscript is the living work and the AUTHOR'S INTENT IS PRIMARY. The Architecture Brief and World Bible are early planning drafts, not law. Divergence from the plan is NOT a failure — when the manuscript's choice is as good or better, the plan should be updated to match it, not the prose reverted.
 
-Format your output beautifully in Markdown.`;
+Read all reports and synthesize them into a single, cohesive "Executive Summary" with these sections:
+1. The manuscript's 3 greatest narrative strengths.
+2. GENUINE CRAFT WEAKNESSES — only problems that make the STORY ITSELF worse: internal contradictions, unpaid-off arcs, pacing/clarity failures, weak execution. Do NOT list mere divergences from the planning documents here.
+3. CANON RECONCILIATION — places where the manuscript has intentionally and effectively moved beyond the Architecture Brief / World Bible / Graph State, and those documents should be UPDATED to match the manuscript.
+4. A prioritized To-Do List split into exactly two buckets:
+   - (A) REVISE PROSE — craft fixes only (the genuine weaknesses from section 2).
+   - (B) UPDATE CANON — reconcile the planning docs to the manuscript (from section 3).
+
+Never recommend rewriting good prose merely to conform to an earlier outline. Format beautifully in Markdown.`;
 
     const allReportsContext = reports
       .map((r) => `## LENS: ${r.aspect.toUpperCase()}\n${r.report}`)

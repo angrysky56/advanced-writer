@@ -42,8 +42,12 @@ function nameSlug(name: string): string {
  */
 export async function generateAndSeedCast(
   storyName: string,
-  logline: string,
+  // The FULL author story idea (premise, characters, world, tone, beats) — NOT a
+  // one-line logline. The cast is planned from the real idea so it matches the
+  // story the author actually described.
+  storyIdea: string,
 ): Promise<SeededCharacter[]> {
+  const logline = storyIdea;
   // 1. PLAN the COMPLETE roster up front. Count scales entirely to the story —
   // a two-hander returns two; an epic returns hundreds. There is NO cap and NO
   // fallback: if planning fails we abort so a story is never generated with the

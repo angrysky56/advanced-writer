@@ -1,5 +1,6 @@
 import { aiRouter } from "../ai/router.js";
 import { neo4jStorage } from "../storage/neo4j.js";
+import { workspaceExporter } from "../storage/workspace.js";
 import { safeParseJson } from "../ai/extract.js";
 
 interface PriorCharacter {
@@ -78,7 +79,8 @@ Output ONLY valid JSON (no markdown):
     "plutchik": { "joy":5,"trust":5,"fear":5,"surprise":5,"sadness":5,"disgust":5,"anger":5,"anticipation":5 }
   } ],
   "new_entities": [ { "name": "", "type": "Prop/Location/Animal/Org", "description": "" } ],
-  "new_relationships": [ { "subject": "", "relation": "KNOWS/OWNS/AT/LOVES/FEARS/etc", "object": "" } ]
+  "new_relationships": [ { "subject": "", "relation": "KNOWS/OWNS/AT/LOVES/FEARS/etc", "object": "" } ],
+  "world_facts": [ "a NEW global/world fact this scene ESTABLISHED that future scenes must stay consistent with — a place and where it is, a rule of how the world or its central mechanic works, a date/timeline/duration, a significant object, a faction or political fact. NOT a character's emotional state (that goes in character_updates). Leave empty if this scene established nothing new about the world." ]
 }
 Score panksepp 1-10 (drives) and plutchik 1-10 (felt emotion) AS OF THIS SCENE. Only include characters actually present. If nothing is new for characters/entities/relationships, use empty arrays.
 PROMOTION RULE for "new_characters": leave this array EMPTY almost always. The cast is planned in full before drafting, so virtually every character who appears is already in the canon cast — match them there. Add an entry ONLY in the rare case that the scene introduces a genuinely NEW, plot-essential individuated being who is absent from the canon cast and could not reasonably have been planned. A minor unnamed presence is NOT a new character — that belongs in new_entities. If in doubt, leave new_characters empty.
@@ -201,6 +203,21 @@ ${sceneText}`;
       } catch {
         /* non-fatal */
       }
+    }
+  }
+
+  // Fill in the world bible's continuity ledger with whatever global facts this
+  // scene established, so the world model grows FROM the story and later scenes
+  // can be verified against it.
+  if (Array.isArray(data.world_facts) && data.world_facts.length) {
+    try {
+      await workspaceExporter.appendWorldContinuity(
+        storyId,
+        sceneId,
+        data.world_facts.map((f: any) => String(f)),
+      );
+    } catch (e) {
+      console.warn("recordSceneTracking: world continuity update failed", e);
     }
   }
 }

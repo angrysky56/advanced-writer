@@ -15,7 +15,16 @@ export const createNarrativeDef = {
   inputSchema: {
     type: "object",
     properties: {
-      logline: { type: "string", description: "One-sentence story premise" },
+      logline: {
+        type: "string",
+        description:
+          "One-sentence hook/title seed. Short. Used for naming and as a fallback if no full premise is given.",
+      },
+      premise: {
+        type: "string",
+        description:
+          "The FULL story idea in the author's own words — characters, world, tone, key beats, the desired ending, any constraints. THIS is what the cast, architecture, world bible, and prose are built from. Always provide this when you have it; do not compress the idea down to the logline.",
+      },
       genre: {
         type: "string",
         description: "Primary genre (e.g., literary fiction, sci-fi, thriller)",
@@ -60,7 +69,17 @@ export const createNarrativeDef = {
 };
 
 export async function executeCreateNarrative(args: any) {
-  const { logline, genre, tone, story_name } = args;
+  const { logline, premise, genre, tone, story_name } = args;
+
+  // EVERYTHING downstream is built from the author's FULL idea, never a single
+  // line. If a rich premise is provided, that is the source of truth; the logline
+  // is only a short tag. This is the fix for "why does it write a fake canon" —
+  // the generators were being starved of the actual story and filling the void
+  // with invention.
+  const storyIdea =
+    premise && typeof premise === "string" && premise.trim()
+      ? premise.trim()
+      : logline;
 
   if (!logline || typeof logline !== "string") {
     return {
@@ -90,7 +109,7 @@ export async function executeCreateNarrative(args: any) {
     // 1. Cast FIRST, so character names are canonical and everything downstream
     // (architecture, scene drafting) references the same actors — fixing the
     // gap where the graph seeded one cast but the prose invented another.
-    const cast = await generateAndSeedCast(storyName, logline);
+    const cast = await generateAndSeedCast(storyName, storyIdea);
     const castBrief = cast
       .map(
         (c) =>
@@ -100,8 +119,10 @@ export async function executeCreateNarrative(args: any) {
 
     // 2. Architecture brief, referencing the established cast (keeps names
     // consistent — no more "Elena" in the brief vs "Elara" in the prose).
-    const archPrompt = `You are an expert story architect. Build a story architecture brief for a ${genre} story with a ${tone} tone.
-Logline: ${logline}
+    const archPrompt = `You are an expert story architect. Build a story architecture brief for a ${genre} story with a ${tone} tone. Base it on the author's FULL story idea below — honor its specifics, characters, beats, and intended ending. Do NOT invent a different story.
+
+=== AUTHOR'S STORY IDEA (the source of truth) ===
+${storyIdea}
 
 Use ONLY this established cast. Do NOT invent any new named character — every role (antagonist, mentor, family member, love interest, etc.) must be filled by one of these characters or left unnamed/incidental. If the premise implies one person occupies multiple roles (e.g. the antagonist is also a relative), map them to a SINGLE cast member; never split one conceptual person into two named characters.
 ${castBrief}`;
@@ -118,7 +139,10 @@ ${castBrief}`;
     try {
       await executeBuildWorldBible({
         story_id: storyName,
-        world_premise: `${logline}\n\nGenre: ${genre}. Tone: ${tone}.`,
+        world_premise: `${storyIdea}\n\nGenre: ${genre}. Tone: ${tone}.`,
+        // Bind the world bible to the cast we just seeded so it doesn't invent a
+        // separate crew (the root cause of the apex_pettiness canon split).
+        cast_brief: castBrief,
       });
       worldBible = (await workspaceExporter.readWorldBible(storyName)) || "";
     } catch {
@@ -127,13 +151,16 @@ ${castBrief}`;
 
     // 4. Draft Scene 1 — using the canon cast and obeying the world rules.
     const draftPrompt = `Write the opening scene for this story.
-Logline: ${logline}
+
+=== AUTHOR'S STORY IDEA (the source of truth — honor it) ===
+${storyIdea}
+
 Tone: ${tone}
 
 === CRAFT DIRECTIVES (apply these WHILE writing) ===
 ${loadCraftDirectives()}
 
-=== WORLD BIBLE (canon rules — never violate) ===
+=== WORLD CONTINUITY LEDGER (starting outline — stay consistent with it; it will be filled in as the story is written) ===
 ${worldBible || "(none yet)"}
 
 CANON CAST — use these characters by name; do NOT invent new named primary characters:

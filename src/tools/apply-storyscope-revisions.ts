@@ -134,7 +134,7 @@ export async function executeApplyStoryscopeRevisions(args: any) {
 
     // 4. PLAN: one call to decide WHICH scenes actually need revision (most do
     // not) and give each a specific directive — so we never rewrite the whole book.
-    const planPrompt = `You are an editorial planner. Given the StoryScope critique and the list of scenes (id :: opening excerpt), decide which scenes genuinely NEED revision for the next draft, and give each a specific directive. Scenes that already work should NOT be listed. Be selective — flag only what the critique actually calls for. Output ONLY JSON:
+    const planPrompt = `You are an editorial planner. The AUTHOR'S INTENT IS PRIMARY and the manuscript is the living work; the Architecture Brief / World Bible are only earlier planning drafts. Flag a scene for revision ONLY for a genuine CRAFT problem — the story contradicting ITSELF, an arc that doesn't pay off, pacing/clarity failures, weak execution. DO NOT flag a scene merely because it diverges from the planning documents; when the prose's choice is as good or better, that is not a defect (the canon should be updated to match it, which is handled separately — not here). Given the StoryScope critique and the list of scenes (id :: opening excerpt), give each genuinely-flawed scene a specific directive. Scenes that already work must NOT be listed. Output ONLY JSON:
 { "revisions": [ { "scene_id": "scene_3", "directive": "the specific change this scene needs" } ] }
 
 === EXECUTIVE SUMMARY ===

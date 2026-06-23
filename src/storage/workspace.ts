@@ -128,6 +128,52 @@ export class WorkspaceExporter {
     }
   }
 
+  /**
+   * Fill in the world bible's living continuity ledger with global facts the
+   * prose has ESTABLISHED (places, rules, timeline, objects, factions). This is
+   * how the world bible grows from the story rather than being written up front:
+   * an outline that gets filled in as scenes are drafted, so later scenes can be
+   * kept consistent and verified against it. Deduplicates verbatim repeats and
+   * creates the ledger section (and file) if absent.
+   */
+  async appendWorldContinuity(
+    storyName: string,
+    sceneId: string,
+    facts: string[],
+  ): Promise<void> {
+    const clean = (facts || [])
+      .map((f) => String(f || "").replace(/\s+/g, " ").trim())
+      .filter((f) => f.length > 0);
+    if (clean.length === 0) return;
+
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "structure");
+    await this.ensureDir(dir);
+    const filePath = path.join(dir, "world-bible.md");
+
+    let content = "";
+    try {
+      content = await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      content = "";
+    }
+
+    const HEADING =
+      "## ESTABLISHED CONTINUITY (filled in as the story is written)";
+    if (!content.includes(HEADING)) {
+      content = `${content.trim()}\n\n---\n\n${HEADING}\n\n_Global facts the prose has established, recorded for continuity. New scenes must stay consistent with these; update them as the story evolves._\n`;
+    }
+
+    // Skip facts already recorded verbatim so the ledger doesn't bloat on repeats.
+    const lines = clean
+      .filter((f) => !content.includes(f))
+      .map((f) => `- [${sceneId}] ${f}`);
+    if (lines.length === 0) return;
+
+    content = `${content.trimEnd()}\n${lines.join("\n")}\n`;
+    await fs.promises.writeFile(filePath, content, "utf8");
+  }
+
   async readArchitectureBrief(storyName: string): Promise<string | null> {
     const storySlug = this.sanitizeFilename(storyName);
     const filePath = path.join(

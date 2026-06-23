@@ -132,10 +132,10 @@ export async function executeContinueNarrative(args: any) {
 === CRAFT DIRECTIVES (apply these WHILE writing — do not produce prose that violates them) ===
 ${loadCraftDirectives()}
 
-=== WORLD BIBLE (canon rules — NEVER violate the CORE RULES & CONSTRAINTS) ===
+=== WORLD CONTINUITY LEDGER (facts the story has ALREADY established — a reference to stay consistent with and verify against, NOT the source you write from) ===
 ${worldBible}
 
-=== ARCHITECTURE BRIEF ===
+=== ARCHITECTURE BRIEF (the story's intent/outline — what this story is trying to be) ===
 ${architecture}
 
 === WORLD BIBLE LORE (semantic excerpts) ===
@@ -163,7 +163,7 @@ Maintain the established prose style. Do not summarize the previous scene; pick 
 Use ONLY the canon cast above for named characters — develop them, do not replace them with newly-invented primary characters.
 ${NAMING_RULE}
 Honor the CHARACTER STATE SHEETS: each character's location, what they know, what they are holding, and their relationships must stay consistent with their recorded state unless this scene deliberately changes them (and if it does, the change must be shown).
-Obey the WORLD BIBLE's CORE RULES & CONSTRAINTS absolutely — the world's logic (how its central mechanic works, its limits and costs) is canon law and must never be contradicted.
+Write this scene from the story's intent, the previous scene, and the user direction — NOT by reciting the ledger. Use the WORLD CONTINUITY LEDGER only to stay consistent: do not contradict facts the story has already established (places, established rules, timeline, objects). If this scene deliberately establishes something new or evolves the world, that is fine — it will be recorded into the ledger afterward.
 CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for AI dialogue or output. If CodeWhisper communicates in code, integrate it naturally into the prose (e.g., using italics or standard quotes). The final output must read like a traditional novel, not a GitHub README.`;
 
     const castNames =
