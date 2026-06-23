@@ -144,7 +144,7 @@ function getCleanSummary(content: string): string {
 
     // Skip leaked LLM preamble so it never becomes the card summary.
     if (
-      /^(excellent|certainly|sure|here(?:'s| is)\b|of course|absolutely|okay\b|ok\b|great[,!.]|based on the)/i.test(
+      /^(excellent|certainly|sure|here(?:'s| is)\b|of course|absolutely|okay\b|ok\b|great[,!.]|based on the|we (?:are|will|'ll)|let me|i (?:will|'ll|am)\b|generate a|the following|below is|as requested)/i.test(
         trimmed,
       )
     )

@@ -89,8 +89,17 @@ ${costarProfile}`;
   const seeded: SeededCharacter[] = [];
   const usedSlugs = new Set<string>();
 
+  // Remove any leaked prompt preamble before the profile's first heading
+  // (e.g. "We are asked to generate a character profile..."). The profile is
+  // required to begin with a "## Name" heading, so anything before it is noise.
+  const stripProfilePreamble = (text: string): string => {
+    const idx = (text || "").search(/^#{1,3}\s+/m);
+    return idx > 0 ? text.slice(idx).trim() : (text || "").trim();
+  };
+
   for (const spec of specs) {
-    const meta = await extractCharacterMeta(spec.profile, spec.fallbackRole);
+    const profile = stripProfilePreamble(spec.profile);
+    const meta = await extractCharacterMeta(profile, spec.fallbackRole);
 
     // Build a stable, unique file/id slug from the real name.
     let slug = nameSlug(meta.name) || nameSlug(spec.fallbackRole);
@@ -99,7 +108,7 @@ ${costarProfile}`;
 
     // Append a consistent, parseable affect block so every profile carries real
     // all-seven-system Panksepp scores in a uniform place (not name-hash noise).
-    const profileWithAffect = `${spec.profile.trim()}\n\n${formatAffectProfile(meta)}`;
+    const profileWithAffect = `${profile.trim()}\n\n${formatAffectProfile(meta)}`;
     await workspaceExporter.saveCharacterProfile(
       storyName,
       slug,
@@ -141,7 +150,7 @@ ${costarProfile}`;
       // Non-fatal.
     }
 
-    seeded.push({ id, fileSlug: slug, profile: spec.profile, meta });
+    seeded.push({ id, fileSlug: slug, profile, meta });
   }
 
   // Wire the archetypal shadow relationship: co-star shadows the protagonist.

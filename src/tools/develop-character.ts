@@ -73,10 +73,13 @@ OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directl
 
       const slug = nameSlug(name);
 
-      // Extract real traits, then append a consistent affect block (all seven
-      // Panksepp systems) so the saved profile is uniform and parseable.
-      const meta = await extractCharacterMeta(characterDoc, "Supporting");
-      const docWithAffect = `${characterDoc.trim()}\n\n${formatAffectProfile(meta)}`;
+      // Strip any leaked prompt preamble before the first heading, then extract
+      // traits and append a consistent affect block.
+      const preIdx = characterDoc.search(/^#{1,3}\s+/m);
+      const cleanDoc =
+        preIdx > 0 ? characterDoc.slice(preIdx).trim() : characterDoc.trim();
+      const meta = await extractCharacterMeta(cleanDoc, "Supporting");
+      const docWithAffect = `${cleanDoc.trim()}\n\n${formatAffectProfile(meta)}`;
       await workspaceExporter.saveCharacterProfile(
         story_name,
         slug,
