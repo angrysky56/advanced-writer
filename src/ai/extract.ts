@@ -61,16 +61,38 @@ export const PLUTCHIK_OPPOSITES: [string, string][] = [
   ["anticipation", "surprise"],
 ];
 
-/** Primary dyads — adjacent emotions combine into a compound feeling. */
+/**
+ * All 24 Plutchik dyads — compound feelings from blending two primaries.
+ * Primary (adjacent), secondary (2 apart), tertiary (3 apart).
+ */
 export const PLUTCHIK_DYADS: Record<string, [string, string]> = {
+  // Primary
   love: ["joy", "trust"],
   submission: ["trust", "fear"],
   awe: ["fear", "surprise"],
   disapproval: ["surprise", "sadness"],
   remorse: ["sadness", "disgust"],
   contempt: ["disgust", "anger"],
-  aggressiveness: ["anger", "anticipation"],
+  aggression: ["anger", "anticipation"],
   optimism: ["anticipation", "joy"],
+  // Secondary
+  envy: ["sadness", "anger"],
+  sorrow: ["sadness", "fear"],
+  disappointment: ["sadness", "surprise"],
+  shame: ["fear", "disgust"],
+  curiosity: ["surprise", "trust"],
+  cynicism: ["disgust", "anticipation"],
+  pride: ["anger", "joy"],
+  delight: ["joy", "surprise"],
+  // Tertiary
+  anxiety: ["anticipation", "fear"],
+  despair: ["fear", "sadness"],
+  guilt: ["joy", "fear"],
+  sentimentality: ["trust", "sadness"],
+  morbidness: ["disgust", "sadness"],
+  outrage: ["surprise", "anger"],
+  dominance: ["anger", "trust"],
+  ambivalence: ["trust", "anticipation"],
 };
 
 /** Three intensity tiers per primary emotion (low / mid / high on the wheel). */
@@ -171,7 +193,7 @@ export function formatAffectProfile(meta: CharacterMeta): string {
       `- ${k}: ${clampScore(e[k])} (${intensityLabel(k, clampScore(e[k]))})`,
   ).join("\n");
 
-  const dyads = deriveDyads(e);
+  const dyads = deriveDyads(e).slice(0, 6); // strongest compound feelings
   const dyadLine =
     dyads.length > 0
       ? dyads.map((d) => `${d.name} (${d.strength})`).join(", ")
@@ -185,6 +207,20 @@ export function formatAffectProfile(meta: CharacterMeta): string {
     `Compound emotions (dyads): ${dyadLine}\n` +
     `Internal tension (opposed pairs): ${ambLine}\n`
   );
+}
+
+/**
+ * Recover a character name from the profile's own markdown heading, used as a
+ * fallback when the structured extractor fails to return one (so the graph
+ * never stores "Unnamed Character" when the profile clearly names them).
+ */
+function nameFromProfile(profile: string): string {
+  const m = (profile || "").match(/^\s{0,3}#{1,3}\s+(.+)$/m);
+  if (!m) return "";
+  let n = m[1].replace(/[*_`#]/g, "").trim();
+  n = n.replace(/^character\s+profile\s*[:\-—]\s*/i, "");
+  n = n.replace(/\s*[—\-–:(].*$/, "").trim();
+  return /[A-Za-z]/.test(n) ? n : "";
 }
 
 /**
@@ -228,8 +264,13 @@ For "panksepp", score EVERY one of the seven systems 1-10 by how strongly it DRI
   }
 
   // Defensive defaults so the graph never stores empty/placeholder identities.
+  // If the extractor missed the name, recover it from the profile heading.
+  const extractedName = (parsed?.name ? String(parsed.name).trim() : "").replace(
+    /^(unnamed|unknown).*/i,
+    "",
+  );
   return {
-    name: (parsed?.name || "Unnamed Character").toString().trim(),
+    name: extractedName || nameFromProfile(profile) || "Unnamed Character",
     archetype: (parsed?.archetype || "Unknown").toString().trim(),
     hamartia: (parsed?.hamartia || "Unknown").toString().trim(),
     shadow: (parsed?.shadow || "Unknown").toString().trim(),
