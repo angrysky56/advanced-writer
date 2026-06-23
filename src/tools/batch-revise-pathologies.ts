@@ -152,7 +152,11 @@ Rewrite the scene now. Maintain formatting style.`;
         story_id,
         version,
       );
-      await workspaceExporter.saveManuscript(story_id, finalManuscript, version);
+      await workspaceExporter.saveManuscript(
+        story_id,
+        finalManuscript,
+        version,
+      );
 
       return {
         content: [

@@ -265,10 +265,9 @@ For "panksepp", score EVERY one of the seven systems 1-10 by how strongly it DRI
 
   // Defensive defaults so the graph never stores empty/placeholder identities.
   // If the extractor missed the name, recover it from the profile heading.
-  const extractedName = (parsed?.name ? String(parsed.name).trim() : "").replace(
-    /^(unnamed|unknown).*/i,
-    "",
-  );
+  const extractedName = (
+    parsed?.name ? String(parsed.name).trim() : ""
+  ).replace(/^(unnamed|unknown).*/i, "");
   return {
     name: extractedName || nameFromProfile(profile) || "Unnamed Character",
     archetype: (parsed?.archetype || "Unknown").toString().trim(),

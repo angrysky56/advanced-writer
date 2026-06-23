@@ -14,7 +14,7 @@ Narrative theory analyzes social structure at several levels:
 - **Connections**: Who does a character know? What is the social graph? (Global, holistic — requires mapping the full network)
 - **Relationship type**: What kind of relationship is this — familial, romantic, professional, adversarial? (Global, consensus)
 
-But the interesting variation goes beyond labeling relationship types. It's about *how social worlds are built*: the density and topology of the network, whether relationships are shown or told, how power circulates, whether community exists or characters are isolated.
+But the interesting variation goes beyond labeling relationship types. It's about _how social worlds are built_: the density and topology of the network, whether relationships are shown or told, how power circulates, whether community exists or characters are isolated.
 
 ## Your Task
 
@@ -50,6 +50,7 @@ The data has three sections:
 ## Feature Design
 
 Features must be:
+
 - **Answerable**: Determined by a specific question about the text
 - **Discrete**: Enumerable values (binary, categorical, multi-select, ordinal, or 1-5 scale)
 - **Detectable**: Identifiable by a careful reader
@@ -98,6 +99,7 @@ Produce a single JSON object:
 ```
 
 ### ID Prefix: SOC
+
 ### Valid Subcodes: STR, REL, DYN
 
 Provide ONLY the JSON output, no additional text.

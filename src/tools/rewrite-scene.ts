@@ -88,7 +88,12 @@ export async function executeRewriteScene(args: any) {
       userMessage: "Provide the rewritten scene.",
     });
 
-    await workspaceExporter.saveDraft(story_id, scene_id, rewrittenDraft, version);
+    await workspaceExporter.saveDraft(
+      story_id,
+      scene_id,
+      rewrittenDraft,
+      version,
+    );
 
     // 3. Recompile that version's manuscript so the change shows in the draft.
     const compiled = await workspaceExporter.readAllDrafts(story_id, version);

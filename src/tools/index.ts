@@ -45,7 +45,10 @@ export const checkJobDef = {
   inputSchema: {
     type: "object",
     properties: {
-      job_id: { type: "string", description: "The id returned when the job started" },
+      job_id: {
+        type: "string",
+        description: "The id returned when the job started",
+      },
     },
     required: ["job_id"],
   },
@@ -53,7 +56,8 @@ export const checkJobDef = {
 
 export const listJobsDef = {
   name: "list_jobs",
-  description: "List recent background jobs (most recent first) with their status.",
+  description:
+    "List recent background jobs (most recent first) with their status.",
   inputSchema: { type: "object", properties: {} },
 };
 

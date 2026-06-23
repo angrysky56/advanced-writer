@@ -13,7 +13,7 @@ The NarraBench framework identifies two relevant features:
 - **Genre**: What is the genre? (Global, holistic, consensus — requires synthesizing the whole text, most readers agree)
 - **Intent**: What is the author's intent? (Global, holistic, perspectival — requires interpretation, readers may disagree)
 
-These are useful starting points, but the interesting variation is in how authors *relate to* genre and literary convention, not just which genre label applies.
+These are useful starting points, but the interesting variation is in how authors _relate to_ genre and literary convention, not just which genre label applies.
 
 ## Your Task
 
@@ -52,6 +52,7 @@ The data has three sections:
 ## Feature Design
 
 Features must be:
+
 - **Answerable**: Determined by a specific question about the text
 - **Discrete**: Enumerable values (binary, categorical, multi-select, ordinal, or 1-5 scale)
 - **Detectable**: Identifiable by a careful reader
@@ -100,6 +101,7 @@ Produce a single JSON object:
 ```
 
 ### ID Prefix: SIT
+
 ### Valid Subcodes: GEN, MET
 
 Provide ONLY the JSON output, no additional text.

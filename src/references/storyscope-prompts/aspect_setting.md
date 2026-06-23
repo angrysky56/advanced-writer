@@ -13,7 +13,7 @@ Setting analysis operates at two scales:
 - **Local setting**: What is the immediate setting of this scene? Where is this taking place right now? (Discrete, deterministic — you can point to it)
 - **Global setting**: What is the overall setting of this story? What locations has the story visited? (Holistic — requires synthesis across the full text)
 
-But the interesting variation is in how authors *construct* setting, not just what they label it.
+But the interesting variation is in how authors _construct_ setting, not just what they label it.
 
 ## Your Task
 
@@ -52,6 +52,7 @@ The data has three sections:
 ## Feature Design
 
 Features must be:
+
 - **Answerable**: Determined by a specific question about the text
 - **Discrete**: Enumerable values (binary, categorical, multi-select, ordinal, or 1-5 scale)
 - **Detectable**: Identifiable by a careful reader
@@ -100,6 +101,7 @@ Produce a single JSON object:
 ```
 
 ### ID Prefix: SET
+
 ### Valid Subcodes: LOC, TIM, ATM
 
 Provide ONLY the JSON output, no additional text.

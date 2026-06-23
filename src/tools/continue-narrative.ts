@@ -4,10 +4,7 @@ import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 import { loadCraftDirectives } from "../ai/craft.js";
-import {
-  recordSceneTracking,
-  buildScratchpadContext,
-} from "./_tracking.js";
+import { recordSceneTracking, buildScratchpadContext } from "./_tracking.js";
 
 export const continueNarrativeDef = {
   name: "continue_narrative",
@@ -108,7 +105,9 @@ export async function executeContinueNarrative(args: any) {
         .join("\n") || "No cast on record yet.";
 
     // Each character's living continuity sheet, read back before writing.
-    const scratchpadContext = buildScratchpadContext(storyState.characters || []);
+    const scratchpadContext = buildScratchpadContext(
+      storyState.characters || [],
+    );
 
     const semanticScenes = await chromaStorage.searchScenes(
       user_direction || "next scene",

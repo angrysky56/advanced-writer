@@ -1,5 +1,5 @@
-export type WorkflowMode = 'brainstorm' | 'collaborative' | 'fast-auto';
-export type TaskType = 'generation' | 'diagnostic' | 'brainstorm';
+export type WorkflowMode = "brainstorm" | "collaborative" | "fast-auto";
+export type TaskType = "generation" | "diagnostic" | "brainstorm";
 
 export interface WorkflowState {
   workflow: string;
@@ -12,7 +12,10 @@ export interface WorkflowState {
   diagnosticHistory: any[]; // Avoid circular dep for now
 }
 
-export type StepBehavior = 'ask_questions' | 'generate_chunk_and_pause' | 'generate_and_continue';
+export type StepBehavior =
+  | "ask_questions"
+  | "generate_chunk_and_pause"
+  | "generate_and_continue";
 
 export interface WorkflowStep {
   name: string;

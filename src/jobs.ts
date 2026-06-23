@@ -102,7 +102,8 @@ export function getJob(id: string): JobRecord | null {
 
 export function listJobs(): JobRecord[] {
   try {
-    return fs.readdirSync(jobsDir())
+    return fs
+      .readdirSync(jobsDir())
       .filter((f) => f.endsWith(".json"))
       .map(
         (f) =>

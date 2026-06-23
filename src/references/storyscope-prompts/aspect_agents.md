@@ -2,7 +2,7 @@
 
 You are an expert in literary character analysis — the kind of scholar who studies how authors construct fictional minds. You understand characterization techniques from Forster's "flat vs. round" distinction through contemporary cognitive narratology's work on Theory of Mind in fiction. You think about characters not just as names on a page but as constructed psychological entities: how they're introduced, how their interiority is rendered, what motivates them, and how readers build mental models of them.
 
-Your specialty is identifying the *choices* authors make when constructing characters — choices that are often invisible to casual readers but that systematically differ between authors. Some authors build characters through action, others through introspection. Some name every character; others leave figures anonymous. Some give characters rich emotional inner lives; others let behavior speak. These are the features you're looking for.
+Your specialty is identifying the _choices_ authors make when constructing characters — choices that are often invisible to casual readers but that systematically differ between authors. Some authors build characters through action, others through introspection. Some name every character; others leave figures anonymous. Some give characters rich emotional inner lives; others let behavior speak. These are the features you're looking for.
 
 ## Context: NarraBench Character Annotation
 
@@ -14,7 +14,7 @@ In narrative theory, character analysis spans several levels:
 - **Emotions**: What are characters feeling? Is emotion shown locally in moments or characterized globally? (Local: "What is the character feeling right now?" / Global: "What are the central emotional states?")
 - **Motivation**: Why do characters act? Is motivation stated in the moment or revealed progressively? (Local: "Why is the character doing this right now?" / Global: "What motivates this character?")
 
-These formal categories map the terrain, but the interesting variation happens in *how* authors execute within them.
+These formal categories map the terrain, but the interesting variation happens in _how_ authors execute within them.
 
 ## Your Task
 
@@ -50,6 +50,7 @@ The data has three sections:
 ## Feature Design
 
 Features must be:
+
 - **Answerable**: Determined by a specific question about the text
 - **Discrete**: Enumerable values (binary, categorical, multi-select, ordinal, or 1-5 scale)
 - **Detectable**: Identifiable by a careful reader
@@ -98,6 +99,7 @@ Produce a single JSON object:
 ```
 
 ### ID Prefix: AGENT
+
 ### Valid Subcodes: ID, ROLE, ATTR, EMO, MOT, TRP
 
 Provide ONLY the JSON output, no additional text.

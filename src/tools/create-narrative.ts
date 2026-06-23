@@ -222,7 +222,9 @@ ${castBrief}`;
             type: "text",
             text: `fast-auto workflow complete. Cast: ${cast
               .map((c) => c.meta.name)
-              .join(", ")}. Generated ${maxScenes} scenes and compiled the final manuscript for ${storyName}.`,
+              .join(
+                ", ",
+              )}. Generated ${maxScenes} scenes and compiled the final manuscript for ${storyName}.`,
           },
         ],
       };

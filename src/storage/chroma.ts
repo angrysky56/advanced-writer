@@ -18,7 +18,7 @@ export class ChromaStorage {
   constructor() {
     // Note: The JS chromadb client typically connects to a running Chroma server
     // (e.g., via Docker) or uses a local path if supported by the specific version.
-    this.client = new ChromaClient({ path: "http://localhost:8000" });
+    this.client = new ChromaClient({ host: "localhost", port: 8000 });
   }
 
   async initialize() {

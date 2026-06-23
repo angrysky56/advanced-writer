@@ -68,7 +68,6 @@ export class AIRouter {
       throw new Error(`Unsupported AI provider: ${provider}`);
     }
   }
-
 }
 
 export const aiRouter = new AIRouter();

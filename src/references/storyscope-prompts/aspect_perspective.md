@@ -54,6 +54,7 @@ The data has three sections:
 ## Feature Design
 
 Features must be:
+
 - **Answerable**: Determined by a specific question about the text
 - **Discrete**: Enumerable values (binary, categorical, multi-select, ordinal, or 1-5 scale)
 - **Detectable**: Identifiable by a careful reader
@@ -102,6 +103,7 @@ Produce a single JSON object:
 ```
 
 ### ID Prefix: PER
+
 ### Valid Subcodes: POV, FOC, DIA
 
 Provide ONLY the JSON output, no additional text.

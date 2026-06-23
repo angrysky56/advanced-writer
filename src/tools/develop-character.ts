@@ -60,7 +60,8 @@ export async function executeDevelopCharacter(args: any) {
 
   try {
     if (action === "create") {
-      if (!name) return text("Error: 'name' is required to create a character.", true);
+      if (!name)
+        return text("Error: 'name' is required to create a character.", true);
 
       const charPrompt = `You are a character psychology expert. Generate a deeply flawed Jungian character profile for a character named ${name}${archetype ? ` with the ${archetype} archetype` : ""}. Detail their core desires, archetype, hamartia, shadow self, moral weakness, and Panksepp affect profile.
 
@@ -111,9 +112,11 @@ OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directl
     }
 
     if (action === "get") {
-      if (!character_id) return text("Error: 'character_id' is required for get.", true);
+      if (!character_id)
+        return text("Error: 'character_id' is required for get.", true);
       const c = await neo4jStorage.getCharacterById(character_id);
-      if (!c) return text(`No character found with id '${character_id}'.`, true);
+      if (!c)
+        return text(`No character found with id '${character_id}'.`, true);
       return text(JSON.stringify(c, null, 2));
     }
 
@@ -128,7 +131,8 @@ OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directl
     }
 
     if (action === "update") {
-      if (!character_id) return text("Error: 'character_id' is required for update.", true);
+      if (!character_id)
+        return text("Error: 'character_id' is required for update.", true);
       const fields: Record<string, string> = {};
       if (name) fields.name = name;
       if (archetype) fields.archetype = archetype;
@@ -142,16 +146,24 @@ OUTPUT RULES: Respond with ONLY the profile in clean markdown, beginning directl
     }
 
     if (action === "shadow_match") {
-      if (!character_id) return text("Error: 'character_id' is required for shadow_match.", true);
+      if (!character_id)
+        return text(
+          "Error: 'character_id' is required for shadow_match.",
+          true,
+        );
       const target = await neo4jStorage.getCharacterById(character_id);
-      if (!target) return text(`No character found with id '${character_id}'.`, true);
+      if (!target)
+        return text(`No character found with id '${character_id}'.`, true);
       const all = await neo4jStorage.listAllCharacters();
       const others = all.filter((c: any) => c.id !== character_id);
       if (others.length === 0)
         return text("No other characters to shadow-match against.");
 
       const roster = others
-        .map((c: any) => `- ${c.name} [${c.id}]: ${c.archetype}; shadow=${c.shadow}; flaw=${c.hamartia}`)
+        .map(
+          (c: any) =>
+            `- ${c.name} [${c.id}]: ${c.archetype}; shadow=${c.shadow}; flaw=${c.hamartia}`,
+        )
         .join("\n");
       const matchPrompt = `Given the target character and a roster, pick the single best "shadow" foil — the character whose archetype/flaw most powerfully mirrors or opposes the target's. Explain briefly.
 
