@@ -6,6 +6,7 @@ import { generateAndSeedCast } from "./_cast.js";
 import { recordSceneTracking } from "./_tracking.js";
 import { executeBuildWorldBible } from "./build-world-bible.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
+import { loadCraftDirectives } from "../ai/craft.js";
 
 export const createNarrativeDef = {
   name: "create_narrative",
@@ -124,6 +125,9 @@ ${castBrief}`;
     const draftPrompt = `Write the opening scene for this story.
 Logline: ${logline}
 Tone: ${tone}
+
+=== CRAFT DIRECTIVES (apply these WHILE writing) ===
+${loadCraftDirectives()}
 
 === WORLD BIBLE (canon rules — never violate) ===
 ${worldBible || "(none yet)"}

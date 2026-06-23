@@ -31,16 +31,34 @@ export const applyStoryscopeRevisionsDef = {
 };
 
 export async function executeApplyStoryscopeRevisions(args: any) {
-  const {
-    story_id,
-    source_version = "v1",
-    target_version = "v2",
-  } = args;
+  const { story_id } = args;
 
   try {
-    // 1. Read Executive Summary
+    // Auto-increment: each run builds Draft N+1 from the latest existing draft,
+    // so repeated revisions produce v2, v3, v4 ... (all diffable). Explicit
+    // source_version/target_version args still override.
+    const versions = await workspaceExporter.listDraftVersions(story_id);
+    const latestNum = versions.length
+      ? Math.max(
+          ...versions.map((v) => parseInt(v.replace(/\D/g, ""), 10) || 1),
+        )
+      : 1;
+    const source_version =
+      args.source_version || (versions.length ? `v${latestNum}` : "v1");
+    const target_version = args.target_version || `v${latestNum + 1}`;
+
+    // 1. Read Executive Summary AND the full specialist lens reports — the
+    // reviser must work from the specific critique, not just the lossy summary.
     const executiveSummary =
       await workspaceExporter.readStoryscopeExecutiveSummary(story_id);
+    const lensReports =
+      await workspaceExporter.readAllStoryscopeReports(story_id);
+    const lensContext =
+      lensReports.length > 0
+        ? lensReports
+            .map((r) => `## LENS: ${r.aspect.toUpperCase()}\n${r.content}`)
+            .join("\n\n")
+        : "(no specialist lens reports found)";
     if (!executiveSummary) {
       return {
         content: [
@@ -89,8 +107,11 @@ export async function executeApplyStoryscopeRevisions(args: any) {
 You have been given a massive structural Executive Summary for the entire novel.
 Your task is to rewrite the provided scene to aggressively apply the To-Do list instructions.
 
-=== EXECUTIVE SUMMARY (DRAFT 2 TO-DO LIST) ===
+=== EXECUTIVE SUMMARY (DRAFT 2 TO-DO LIST — the priorities) ===
 ${executiveSummary}
+
+=== SPECIALIST LENS REPORTS (the full, specific critique — apply the granular notes relevant to THIS scene) ===
+${lensContext}
 
 === INSTRUCTIONS ===
 - Read the scene below.

@@ -16,7 +16,53 @@ type Selection =
   | { type: "manuscript" }
   | { type: "scene"; id: string }
   | { type: "character"; id: string }
-  | { type: "doc"; id: "architecture" | "worldbible" | "storyscope" };
+  | { type: "doc"; id: "architecture" | "worldbible" | "storyscope" }
+  | { type: "aspect"; id: string }
+  | { type: "diff" };
+
+/** Simple LCS line diff (guarded against huge inputs). */
+function lineDiff(
+  aText: string,
+  bText: string,
+): { t: "same" | "add" | "del"; x: string }[] {
+  const a = (aText || "").split("\n");
+  const b = (bText || "").split("\n");
+  const n = a.length,
+    m = b.length;
+  if (n * m > 4_000_000) {
+    // Too large for an inline diff — show as full replace.
+    return [
+      ...a.map((x) => ({ t: "del" as const, x })),
+      ...b.map((x) => ({ t: "add" as const, x })),
+    ];
+  }
+  const dp: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array(m + 1).fill(0),
+  );
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] =
+        a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: { t: "same" | "add" | "del"; x: string }[] = [];
+  let i = 0,
+    j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      out.push({ t: "same", x: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ t: "del", x: a[i] });
+      i++;
+    } else {
+      out.push({ t: "add", x: b[j] });
+      j++;
+    }
+  }
+  while (i < n) out.push({ t: "del", x: a[i++] });
+  while (j < m) out.push({ t: "add", x: b[j++] });
+  return out;
+}
 
 const C = {
   bg: "#0e0e16",
@@ -106,6 +152,10 @@ export default function Studio() {
   const [sel, setSel] = useState<Selection>({ type: "manuscript" });
   const [input, setInput] = useState("");
   const [running, setRunning] = useState<string>("");
+  const [diffA, setDiffA] = useState<string>("v1");
+  const [diffB, setDiffB] = useState<string>("v1");
+  const [diffTextA, setDiffTextA] = useState<string>("");
+  const [diffTextB, setDiffTextB] = useState<string>("");
 
   const { messages, sendMessage, status } = useChat();
   const busy = status === "submitted" || status === "streaming";
@@ -130,6 +180,22 @@ export default function Studio() {
       .catch(() => setArc([]));
     setSel({ type: "manuscript" });
   }, [activeId]);
+
+  useEffect(() => {
+    if (sel.type !== "diff" || !activeId) return;
+    const load = async (v: string) => {
+      try {
+        const r = await fetch(`/api/workspace?version=${v}`);
+        const d = await r.json();
+        const st = (d.stories || []).find((s: any) => s.id === activeId);
+        return st?.manuscript || "";
+      } catch {
+        return "";
+      }
+    };
+    load(diffA).then(setDiffTextA);
+    load(diffB).then(setDiffTextB);
+  }, [sel, diffA, diffB, activeId]);
 
   const story = useMemo(
     () => stories.find((s) => s.id === activeId) || stories[0],
@@ -229,6 +295,68 @@ export default function Studio() {
             ? story.worldBible
             : story.executiveSummary;
       return text ? <Markdown text={text} /> : <Empty msg="Not generated yet." />;
+    }
+    if (sel.type === "aspect") {
+      const r = (story.aspectReports || []).find((x: any) => x.aspect === sel.id);
+      return r ? <Markdown text={r.content} /> : <Empty msg="Report not found." />;
+    }
+    if (sel.type === "diff") {
+      const vers: string[] = story.availableVersions || ["v1"];
+      const diff = lineDiff(diffTextA, diffTextB);
+      return (
+        <div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center" }}>
+            <span style={{ color: C.dim, fontSize: "0.8rem" }}>Compare manuscript</span>
+            <select value={diffA} onChange={(e) => setDiffA(e.target.value)} style={selectStyle}>
+              {vers.map((v) => (
+                <option key={v} value={v} style={{ background: C.panel }}>{v}</option>
+              ))}
+            </select>
+            <span style={{ color: C.dim }}>→</span>
+            <select value={diffB} onChange={(e) => setDiffB(e.target.value)} style={selectStyle}>
+              {vers.map((v) => (
+                <option key={v} value={v} style={{ background: C.panel }}>{v}</option>
+              ))}
+            </select>
+            <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: C.dim }}>
+              <span style={{ color: "#e06c75" }}>− removed</span> ·{" "}
+              <span style={{ color: "#7cd992" }}>+ added</span>
+            </span>
+          </div>
+          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.78rem", lineHeight: 1.5 }}>
+            {diff.map((d, idx) => (
+              <div
+                key={idx}
+                style={{
+                  background:
+                    d.t === "add"
+                      ? "rgba(124,217,146,0.12)"
+                      : d.t === "del"
+                        ? "rgba(224,108,117,0.12)"
+                        : "transparent",
+                  color:
+                    d.t === "same"
+                      ? "rgba(255,255,255,0.5)"
+                      : d.t === "add"
+                        ? "#cdeccd"
+                        : "#f0c5c9",
+                  whiteSpace: "pre-wrap",
+                  padding: "0 6px",
+                  borderLeft:
+                    d.t === "add"
+                      ? "2px solid #7cd992"
+                      : d.t === "del"
+                        ? "2px solid #e06c75"
+                        : "2px solid transparent",
+                }}
+              >
+                {d.t === "add" ? "+ " : d.t === "del" ? "− " : "  "}
+                {d.x || " "}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
     }
     return null;
   };
@@ -374,6 +502,16 @@ export default function Studio() {
       {/* explorer */}
       <div style={{ ...col, borderRight: `1px solid ${C.border}`, overflowY: "auto" }}>
         <NavItem label="📖 Full Manuscript" active={sel.type === "manuscript"} onClick={() => setSel({ type: "manuscript" })} />
+        <NavItem
+          label="⇄ Compare Versions"
+          active={sel.type === "diff"}
+          onClick={() => {
+            const vers = story?.availableVersions || ["v1"];
+            setDiffA(vers[0]);
+            setDiffB(vers[vers.length - 1]);
+            setSel({ type: "diff" });
+          }}
+        />
         <Group title="Scenes" />
         {(story?.drafts || []).map((d: any) => (
           <NavItem key={d.id} label={`▸ ${d.title}`} active={sel.type === "scene" && sel.id === d.id} onClick={() => setSel({ type: "scene", id: d.id })} indent />
@@ -386,6 +524,16 @@ export default function Studio() {
         <NavItem label="◷ Architecture Brief" active={sel.type === "doc" && (sel as any).id === "architecture"} onClick={() => setSel({ type: "doc", id: "architecture" })} indent />
         <NavItem label="◷ World Bible" active={sel.type === "doc" && (sel as any).id === "worldbible"} onClick={() => setSel({ type: "doc", id: "worldbible" })} indent />
         <NavItem label="◷ StoryScope Summary" active={sel.type === "doc" && (sel as any).id === "storyscope"} onClick={() => setSel({ type: "doc", id: "storyscope" })} indent />
+        {(story?.aspectReports || []).length > 0 && <Group title="Critique Lenses" />}
+        {(story?.aspectReports || []).map((r: any) => (
+          <NavItem
+            key={r.aspect}
+            label={`◔ ${r.aspect.replace(/_/g, " ")}`}
+            active={sel.type === "aspect" && sel.id === r.aspect}
+            onClick={() => setSel({ type: "aspect", id: r.aspect })}
+            indent
+          />
+        ))}
       </div>
 
       {/* center: action bar + manuscript + copilot rail */}

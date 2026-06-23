@@ -173,6 +173,21 @@ export class WorkspaceExporter {
     }
   }
 
+  /** List existing draft version folders (e.g. ["v1","v2","v3"]). */
+  async listDraftVersions(storyName: string): Promise<string[]> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "drafts");
+    try {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      return entries
+        .filter((e) => e.isDirectory() && /^v\d+$/i.test(e.name))
+        .map((e) => e.name)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    } catch {
+      return [];
+    }
+  }
+
   async listDrafts(
     storyName: string,
     version: string = "v1",
@@ -281,6 +296,27 @@ export class WorkspaceExporter {
     const filePath = path.join(dir, "executive-summary.md");
     await fs.promises.writeFile(filePath, content, "utf8");
     return filePath;
+  }
+
+  /** All specialist lens reports (everything except the executive summary). */
+  async readAllStoryscopeReports(
+    storyName: string,
+  ): Promise<{ aspect: string; content: string }[]> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    try {
+      const files = await fs.promises.readdir(dir);
+      const out: { aspect: string; content: string }[] = [];
+      for (const f of files
+        .filter((x) => x.endsWith(".md") && x !== "executive-summary.md")
+        .sort()) {
+        const content = await fs.promises.readFile(path.join(dir, f), "utf8");
+        out.push({ aspect: f.replace(".md", ""), content });
+      }
+      return out;
+    } catch {
+      return [];
+    }
   }
 
   async readStoryscopeExecutiveSummary(

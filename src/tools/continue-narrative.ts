@@ -3,6 +3,7 @@ import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
+import { loadCraftDirectives } from "../ai/craft.js";
 import {
   recordSceneTracking,
   buildScratchpadContext,
@@ -128,6 +129,9 @@ export async function executeContinueNarrative(args: any) {
         : "No relevant world lore found.";
 
     const systemPrompt = `You are a masterful storyteller. Your task is to write the NEXT scene in this story.
+
+=== CRAFT DIRECTIVES (apply these WHILE writing — do not produce prose that violates them) ===
+${loadCraftDirectives()}
 
 === WORLD BIBLE (canon rules — NEVER violate the CORE RULES & CONSTRAINTS) ===
 ${worldBible}
