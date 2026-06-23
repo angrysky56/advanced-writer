@@ -18,7 +18,7 @@
 1. `create_narrative`
    Build a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
 2. `develop_character`
-   Create, update, query, or shadow-match characters in the persistent Archetypal Database.
+   Create, update, query, list, or shadow-match characters in the persistent Archetypal Database.
 3. `review_narrative`
    Run neurochemical scoring, pathology diagnostics, and agency enforcement on existing text. Produces a structured neuro-critique report.
 4. `select_structure`
@@ -28,21 +28,19 @@
 6. `continue_narrative`
    Continue drafting a story by generating the next scene based on the previous scene, the story architecture, and user direction.
 7. `batch_revise_pathologies`
-   Scan the diagnostics for a story and for each failing scene, trigger a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
-   Executes the following logic loop completely under the hood:
-   - Grade the Diagnostics: It reads all of the existing neuro-critique reports for a given story and uses an LLM to "grade" them. If a scene has flatlining cortisol, false agency, or other pathologies, it marks it as a "FAIL".
-   - The Character Revolt: For each failing scene, it pulls the actual character profiles out of Neo4j and loads the bad scene draft. It then instructs the LLM to roleplay as the characters sitting in a writer's room, fiercely arguing to protect their own agency and archetypes.
-   - The Demands: At the end of the argument, the characters output a list of "Unified Character Demands" on how the scene must change.
-   - The Rewrite: The editing engine takes the bad draft and strictly applies the Character Demands to rewrite the scene.
-   - Recompile: It stitches all the scenes (both untouched and newly rewritten) back together into a fresh final_manuscript.md.
+   Scans a story's diagnostics, triggers a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
 8. `build_world_bible`
-   Generates a comprehensive World Bible including lore, history, magic systems, and rules based on the story and its characters.
+   Expands a premise into a highly detailed World Bible including Factions, Tech/Magic, Economics, and Geography, and saves it to Vector Memory.
 9. `expand_to_novel`
    Expands a brief synopsis into a structured Beat Sheet, and optionally automatically drafts the entire manuscript scene by scene.
 10. `storyscope_final_review`
     Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
 11. `apply_storyscope_revisions`
-    Executes a massive Draft 2 background pass. Reads the StoryScope Executive Summary and systematically rewrites every single drafted scene to aggressively apply the structural To-Do list.
+    Executes a massive Draft 2 background pass. Reads the StoryScope Executive Summary and systematically rewrites every drafted scene to aggressively apply the structural To-Do list. Non-destructive: writes to a new draft version.
+12. `check_job`
+    Check the status/result of a background job started by running a long tool with async=true. Returns running | completed | failed plus the final summary.
+13. `list_jobs`
+    List recent background jobs (most recent first) with their status.
 
 ---
 
