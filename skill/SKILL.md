@@ -139,7 +139,7 @@ The advanced-writer framework features a suite of 11 native MCP tools plus an in
 4. **select_structure**: Recommends and outlines the story skeleton (e.g. Truby, Dramatica, Kishōtenketsu, Fichtean Curve) based on a premise and designing principle.
 5. **rewrite_scene**: Performs targeted scene-level improvements with specific adjustments on target neurochemical axes based on critique reports.
 6. **continue_narrative**: Automatically generates the next scene draft in sequence, respecting the timeline, character profiles, and user directives.
-7. **build_world_bible**: Autonomously expands a logline into a massive World Bible (Factions, Tech/Magic, Economics, Geography) and stores it on disk.
+7. **build_world_bible**: Autonomously expands a logline into a World Bible whose FIRST section is **CORE RULES & CONSTRAINTS** (the world's hard logic/limits/costs — canon law that scenes must never violate), followed by Factions, Tech/Magic, Economics, Geography. `create_narrative` now builds this automatically before drafting so world logic stays consistent.
 8. **expand_to_novel**: Outlines a scene-by-scene Beat Sheet and runs an autonomous background drafting loop to write the entire manuscript chapter-by-chapter.
 9. **batch_revise_pathologies**: The "Character Writer's Room." Spawns character personas to critique a failing draft, compiles Character Demands, and rewrites the scenes to honor them.
 10. **storyscope_final_review**: Runs the ultimate structural audit. It dispatches 10 parallel AI specialists to evaluate a compiled manuscript across 10 StoryScope aspect lenses:
@@ -154,7 +154,7 @@ The advanced-writer framework features a suite of 11 native MCP tools plus an in
     - _Situatedness_: Cultural unmooring, historical references
     - _Social Networks_: Character relationships, power dynamics
       Synthesizes these reports into an Executive Summary containing a Draft 2 prioritized action plan.
-11. **apply_storyscope_revisions**: Autonomously parses the StoryScope Executive Summary action plan and applies all required edits across the drafts.
+11. **apply_storyscope_revisions**: Builds the next draft version (auto-increments v1→v2→v3…, non-destructive) by applying BOTH the Executive Summary action plan AND the full specialist lens reports to every scene. Any two versions can be diffed in the Studio UI.
 12. **web_search**: Searches the web to retrieve specific names, places, cultural touchstones, and domain terms to inject verisimilitude (combats vague allusions).
 
 </automated_mcp_tools>
@@ -169,6 +169,8 @@ All domain knowledge in `references/`:
 **Character Psychology:** 03-archetypal-database.md
 **Protagonist Agency:** 04-agency-enforcement.md
 **Automated Editing:** 05-narrative-diagnostics.md
+**Memory, Continuity & Characters:** 06-memory-and-tracking.md
+**Authorial Ethics (an available lens — NEVER a forced theme):** 07-authorial-ethics.md
 **AI Pathology Data:** storyscope-anti-patterns.md
 **Research Foundation:** narrative-research-summary.md
 
