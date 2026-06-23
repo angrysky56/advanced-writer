@@ -74,7 +74,7 @@ export async function executeCreateNarrative(args: any) {
     };
   }
 
-  const storyName =
+  const desiredName =
     story_name ||
     logline
       .split(" ")
@@ -83,6 +83,10 @@ export async function executeCreateNarrative(args: any) {
       .replace(/[^a-zA-Z0-9_]/g, "");
 
   try {
+    // "create" must always make a NEW story folder, never write into an existing
+    // one (that's continue_narrative's job). Uniquify the name on collision.
+    const storyName = await workspaceExporter.uniqueStoryName(desiredName);
+
     // 1. Cast FIRST, so character names are canonical and everything downstream
     // (architecture, scene drafting) references the same actors — fixing the
     // gap where the graph seeded one cast but the prose invented another.

@@ -61,10 +61,27 @@ Output ONLY valid JSON (no markdown):
     "panksepp": { "SEEKING":5,"FEAR":5,"RAGE":5,"LUST":5,"CARE":5,"PANIC_GRIEF":5,"PLAY":5 },
     "plutchik": { "joy":5,"trust":5,"fear":5,"surprise":5,"sadness":5,"disgust":5,"anger":5,"anticipation":5 }
   } ],
+  "new_characters": [ {
+    "name": "Full Name of a SIGNIFICANT character who appears in this scene but is NOT in the canon cast above",
+    "role": "their role/function (e.g. 'crew medic', 'the hive intelligence', 'the captain's dog')",
+    "brief": "one line: who they are",
+    "arc_progression": "one sentence: what they did / what changed for them this scene",
+    "scratchpad": {
+      "location": "where they are at scene end",
+      "knows": "what they know or believe",
+      "wants": "their current goal (or instinct, for a creature/animal)",
+      "holding": "physical state",
+      "relationships": "stance toward named characters",
+      "last_action": "what they did this scene"
+    },
+    "panksepp": { "SEEKING":5,"FEAR":5,"RAGE":5,"LUST":5,"CARE":5,"PANIC_GRIEF":5,"PLAY":5 },
+    "plutchik": { "joy":5,"trust":5,"fear":5,"surprise":5,"sadness":5,"disgust":5,"anger":5,"anticipation":5 }
+  } ],
   "new_entities": [ { "name": "", "type": "Prop/Location/Animal/Org", "description": "" } ],
   "new_relationships": [ { "subject": "", "relation": "KNOWS/OWNS/AT/LOVES/FEARS/etc", "object": "" } ]
 }
-Score panksepp 1-10 (drives) and plutchik 1-10 (felt emotion) AS OF THIS SCENE. Only include characters actually present. If nothing is new for entities/relationships, use empty arrays.
+Score panksepp 1-10 (drives) and plutchik 1-10 (felt emotion) AS OF THIS SCENE. Only include characters actually present. If nothing is new for characters/entities/relationships, use empty arrays.
+PROMOTION RULE for "new_characters": leave this array EMPTY almost always. The cast is planned in full before drafting, so virtually every character who appears is already in the canon cast — match them there. Add an entry ONLY in the rare case that the scene introduces a genuinely NEW, plot-essential individuated being who is absent from the canon cast and could not reasonably have been planned. A minor unnamed presence is NOT a new character — that belongs in new_entities. If in doubt, leave new_characters empty.
 SCENE:
 ${sceneText}`;
 
@@ -80,6 +97,49 @@ ${sceneText}`;
     data = null;
   }
   if (!data) return;
+
+  // Promote significant NEW characters the scene introduced (a fresh crewmate,
+  // a creature/AI, the emergent "them", a notable pet) to tracked Character
+  // nodes, then seed their first scratchpad + affect snapshot. Done BEFORE the
+  // canon updates so a being introduced and developed in the same scene lands.
+  if (Array.isArray(data.new_characters)) {
+    for (const nc of data.new_characters) {
+      if (!nc?.name) continue;
+      try {
+        await neo4jStorage.ensureCharacter(
+          storyId,
+          nc.name,
+          nc.role || "Supporting",
+          nc.brief || "",
+        );
+        if (nc.arc_progression) {
+          await neo4jStorage.updateCharacterState(
+            storyId,
+            nc.name,
+            nc.arc_progression,
+          );
+        }
+        if (nc.scratchpad) {
+          await neo4jStorage.updateScratchpad(
+            storyId,
+            nc.name,
+            JSON.stringify(nc.scratchpad),
+          );
+        }
+        if (nc.panksepp || nc.plutchik) {
+          await neo4jStorage.appendAffectSnapshot(
+            storyId,
+            nc.name,
+            sceneId,
+            nc.panksepp || {},
+            nc.plutchik || {},
+          );
+        }
+      } catch (e) {
+        console.warn("recordSceneTracking: new character promotion failed", e);
+      }
+    }
+  }
 
   if (Array.isArray(data.character_updates)) {
     for (const u of data.character_updates) {

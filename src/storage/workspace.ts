@@ -17,6 +17,24 @@ export class WorkspaceExporter {
     return name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   }
 
+  /**
+   * Return a story name whose folder does not already exist, appending _2, _3…
+   * if needed. Ensures create_narrative always makes a NEW story rather than
+   * writing into an existing one.
+   */
+  async uniqueStoryName(name: string): Promise<string> {
+    let candidate = name;
+    let n = 2;
+    while (
+      fs.existsSync(path.join(this.baseDir, this.sanitizeFilename(candidate))) &&
+      n < 1000
+    ) {
+      candidate = `${name}_${n}`;
+      n++;
+    }
+    return candidate;
+  }
+
   async saveCharacterProfile(
     storyName: string,
     characterName: string,

@@ -56,6 +56,49 @@ export class Neo4jStorage {
     }
   }
 
+  /**
+   * Ensure a Character node exists for a significant character introduced
+   * mid-story (the continuity supervisor calls this so newly-appearing people,
+   * creatures, or notable pets get tracked — not just props/locations).
+   */
+  async ensureCharacter(
+    storyId: string,
+    name: string,
+    role: string,
+    description: string,
+  ) {
+    const session = this.getSession();
+    try {
+      const id = `${storyId}_${name.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`;
+      await session.run(
+        `
+        MERGE (c:Character { id: $id })
+        ON CREATE SET
+          c.name = $name,
+          c.role = $role,
+          c.archetype = 'Emergent',
+          c.current_state = 'Introduced mid-story.',
+          c.document = $description,
+          c.story_ids = [$storyId],
+          c.created_at = $now,
+          c.updated_at = $now
+        ON MATCH SET
+          c.story_ids = CASE WHEN NOT $storyId IN c.story_ids THEN c.story_ids + $storyId ELSE c.story_ids END
+        `,
+        {
+          id,
+          name,
+          role: role || "Supporting",
+          description: description || "",
+          storyId,
+          now: new Date().toISOString(),
+        },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
   async createShadowEdge(characterId1: string, characterId2: string) {
     const session = this.getSession();
     try {

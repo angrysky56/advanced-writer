@@ -4,6 +4,7 @@ import { neo4jStorage } from "../storage/neo4j.js";
 import {
   extractCharacterMeta,
   formatAffectProfile,
+  safeParseJson,
   CharacterMeta,
 } from "../ai/extract.js";
 
@@ -30,64 +31,74 @@ function nameSlug(name: string): string {
 }
 
 /**
- * Generate a three-person cast (protagonist, co-star, supporting), save each
- * prose profile to the workspace, extract their REAL identities, and seed them
- * into the Neo4j graph under their real names/traits (not hardcoded
- * placeholders). Wires a SHADOWS edge from the co-star to the protagonist.
+ * Generate a story-appropriate principal cast — the SIZE scales to the premise
+ * (a two-hander gets two; an ensemble crew gets the whole crew plus the android,
+ * the creature, a notable pet, etc.). Saves each prose profile, extracts REAL
+ * identities, and seeds them into the graph under their real names/traits, then
+ * wires a SHADOWS edge from the second-listed character to the protagonist.
  *
  * Shared by create_narrative and expand_to_novel so the graph "living state"
- * always matches the actual characters — which is what the continuity-extraction
- * updates in continue_narrative match against by name.
+ * always matches the actual characters the continuity-extraction matches by name.
  */
 export async function generateAndSeedCast(
   storyName: string,
   logline: string,
 ): Promise<SeededCharacter[]> {
-  // 1. Protagonist
-  const protagonistPrompt = `Based on this logline: ${logline}, generate a deeply flawed Jungian character profile for the Protagonist.
-Give them a distinct proper NAME. Detail their core desires, archetype, hamartia (tragic flaw), shadow self, moral weakness, and Panksepp affect profile (e.g. SEEKING, FEAR, RAGE, PANIC_GRIEF, PLAY, CARE).`;
-  const protagonistProfile = await aiRouter.generateCompletion({
-    taskType: "generation",
-    systemPrompt: protagonistPrompt + FORMAT_RULES,
-    userMessage: "Generate the protagonist character profile.",
-  });
+  // 1. PLAN the COMPLETE roster up front. Count scales entirely to the story —
+  // a two-hander returns two; an epic returns hundreds. There is NO cap and NO
+  // fallback: if planning fails we abort so a story is never generated with the
+  // wrong cast. Every named/individuated being is planned HERE, not mid-draft.
+  const rosterPrompt = `You are a casting director. Read the premise and list the COMPLETE cast this story needs — EVERY named or distinctly individuated being, however many that is. Include protagonist(s), antagonist(s), the full ensemble/crew, named allies and minor named roles, AND significant non-human characters (an android, a creature, a sentient ship, a collective intelligence, a notable pet). Scale honestly to the premise: an intimate story may have two or three; an ensemble has dozens; an epic or chronicle (a war, a nation, a life with many followers) may have a hundred or more — list them ALL. EXCLUDE ONLY pure nameless background (a faceless crowd, a one-line unnamed waiter). Do not pad and do not truncate. List the protagonist FIRST.
 
-  // 2. Co-Star
-  const costarPrompt = `Based on this logline: ${logline} and the Protagonist's profile below, generate a deeply flawed Jungian character profile for a Co-Star (a foil, rival, or antagonist) who creates strong thematic tension.
-Give them a distinct proper NAME. Detail their core desires, archetype, hamartia, shadow self, moral weakness, and relationship to the Protagonist.
+Tag each with a "tier":
+- "principal": POV characters, the antagonist, anyone who drives the plot or recurs heavily.
+- "supporting": named characters who matter but appear in fewer scenes.
 
-=== PROTAGONIST ===
-${protagonistProfile}`;
-  const costarProfile = await aiRouter.generateCompletion({
-    taskType: "generation",
-    systemPrompt: costarPrompt + FORMAT_RULES,
-    userMessage: "Generate the co-star character profile.",
-  });
+Output ONLY JSON:
+{ "cast": [ { "tier": "principal" | "supporting", "role": "short role label, e.g. 'Protagonist — disgraced pilot', 'Android exobiologist', 'The Organism'", "brief": "one line: who they are and their narrative function" } ] }
 
-  // 3. Supporting
-  const supportingPrompt = `Based on this logline: ${logline} and the existing cast below, generate a Jungian character profile for a Supporting Character (e.g. mentor, sidekick, or witness) who aids or complicates the narrative.
-Give them a distinct proper NAME. Detail their core desires, archetype, hamartia, shadow self, and Panksepp profile.
+Premise: ${logline}`;
+  let roster: { role: string; brief: string; tier: string }[] = [];
+  let rosterError = "";
+  try {
+    const rosterResp = await aiRouter.generateCompletion({
+      taskType: "brainstorm",
+      systemPrompt: rosterPrompt,
+      userMessage: "Output the COMPLETE cast roster as JSON.",
+    });
+    const parsed = safeParseJson<any>(rosterResp);
+    if (parsed && Array.isArray(parsed.cast) && parsed.cast.length > 0) {
+      roster = parsed.cast
+        .filter((c: any) => c && c.role)
+        .map((c: any) => ({
+          role: String(c.role),
+          brief: String(c.brief || ""),
+          tier:
+            String(c.tier || "").toLowerCase() === "supporting"
+              ? "supporting"
+              : "principal",
+        }));
+    } else {
+      rosterError = "planner returned no usable 'cast' array";
+    }
+  } catch (e: any) {
+    rosterError = e?.message || String(e);
+  }
+  if (roster.length === 0) {
+    // Abort loudly — never silently ship a truncated or wrong cast.
+    throw new Error(
+      `Cast planning failed for "${storyName}": ${rosterError || "empty roster"}. Aborting before any story is generated.`,
+    );
+  }
 
-=== CAST ===
-Protagonist:
-${protagonistProfile}
-
-Co-Star:
-${costarProfile}`;
-  const supportingProfile = await aiRouter.generateCompletion({
-    taskType: "generation",
-    systemPrompt: supportingPrompt + FORMAT_RULES,
-    userMessage: "Generate the supporting character profile.",
-  });
-
-  const specs: { profile: string; fallbackRole: string }[] = [
-    { profile: protagonistProfile, fallbackRole: "Protagonist" },
-    { profile: costarProfile, fallbackRole: "Co-Star" },
-    { profile: supportingProfile, fallbackRole: "Supporting" },
-  ];
-
+  // 2. Generate + seed each roster member in one pass. Effort is TIERED:
+  // principals get a full psychological profile; supporting roles get a light
+  // sketch. To stay consistent without ballooning context on large casts, we
+  // feed only a compact "Name — role" registry forward (not full profile text),
+  // which is enough to prevent duplicate names while scaling to hundreds.
   const seeded: SeededCharacter[] = [];
   const usedSlugs = new Set<string>();
+  const nameRegistry: string[] = [];
 
   // Remove any leaked prompt preamble before the profile's first heading
   // (e.g. "We are asked to generate a character profile..."). The profile is
@@ -97,12 +108,32 @@ ${costarProfile}`;
     return idx > 0 ? text.slice(idx).trim() : (text || "").trim();
   };
 
-  for (const spec of specs) {
-    const profile = stripProfilePreamble(spec.profile);
-    const meta = await extractCharacterMeta(profile, spec.fallbackRole);
+  for (const member of roster) {
+    const alreadyCast = nameRegistry.length
+      ? `\n\n=== CHARACTERS ALREADY CAST (do NOT reuse, duplicate, or rename these) ===\n${nameRegistry.join("\n")}`
+      : "";
+
+    const prompt =
+      member.tier === "supporting"
+        ? `Based on this premise: ${logline}, write a LIGHT character sketch for a SUPPORTING role (keep it concise — this is not a lead).
+ROLE: ${member.role}${member.brief ? `\nWHO THEY ARE: ${member.brief}` : ""}
+Give them a distinct proper NAME. In one short paragraph cover: their narrative function, one defining trait, one flaw, and their dominant emotional drive.${alreadyCast}`
+        : `Based on this premise: ${logline}, generate a deeply flawed character profile for this PRINCIPAL:
+ROLE: ${member.role}${member.brief ? `\nWHO THEY ARE: ${member.brief}` : ""}
+Give them a distinct proper NAME. Detail their core desires, archetype, hamartia, shadow self, moral weakness, and Panksepp affect profile.${alreadyCast}`;
+
+    const raw = await aiRouter.generateCompletion({
+      // Supporting sketches use the cheaper/faster brainstorm route.
+      taskType: member.tier === "supporting" ? "brainstorm" : "generation",
+      systemPrompt: prompt + FORMAT_RULES,
+      userMessage: `Generate the ${member.tier} character profile for: ${member.role}.`,
+    });
+
+    const profile = stripProfilePreamble(raw);
+    const meta = await extractCharacterMeta(profile, member.role);
 
     // Build a stable, unique file/id slug from the real name.
-    let slug = nameSlug(meta.name) || nameSlug(spec.fallbackRole);
+    let slug = nameSlug(meta.name) || nameSlug(member.role);
     if (usedSlugs.has(slug)) slug = `${slug}_${seeded.length + 1}`;
     usedSlugs.add(slug);
 
@@ -151,6 +182,7 @@ ${costarProfile}`;
     }
 
     seeded.push({ id, fileSlug: slug, profile, meta });
+    nameRegistry.push(`${meta.name} — ${member.role}`);
   }
 
   // Wire the archetypal shadow relationship: co-star shadows the protagonist.
