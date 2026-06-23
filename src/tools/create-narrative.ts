@@ -4,6 +4,7 @@ import { chromaStorage } from "../storage/chroma.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
 import { generateAndSeedCast } from "./_cast.js";
 import { recordSceneTracking } from "./_tracking.js";
+import { executeBuildWorldBible } from "./build-world-bible.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 
 export const createNarrativeDef = {
@@ -106,10 +107,26 @@ ${castBrief}`;
     });
     await workspaceExporter.saveArchitectureBrief(storyName, architecture);
 
-    // 3. Draft Scene 1 — using the canon cast by name.
+    // 3. World Bible — establishes the canon RULES of the world so its logic is
+    // consistent across scenes (prevents each scene reinventing the physics).
+    let worldBible = "";
+    try {
+      await executeBuildWorldBible({
+        story_id: storyName,
+        world_premise: `${logline}\n\nGenre: ${genre}. Tone: ${tone}.`,
+      });
+      worldBible = (await workspaceExporter.readWorldBible(storyName)) || "";
+    } catch {
+      worldBible = "";
+    }
+
+    // 4. Draft Scene 1 — using the canon cast and obeying the world rules.
     const draftPrompt = `Write the opening scene for this story.
 Logline: ${logline}
 Tone: ${tone}
+
+=== WORLD BIBLE (canon rules — never violate) ===
+${worldBible || "(none yet)"}
 
 CANON CAST — use these characters by name; do NOT invent new named primary characters:
 ${castBrief}`;

@@ -105,6 +105,7 @@ export default function Studio() {
   const [arc, setArc] = useState<any[]>([]);
   const [sel, setSel] = useState<Selection>({ type: "manuscript" });
   const [input, setInput] = useState("");
+  const [running, setRunning] = useState<string>("");
 
   const { messages, sendMessage, status } = useChat();
   const busy = status === "submitted" || status === "streaming";
@@ -149,6 +150,36 @@ export default function Studio() {
     setInput("");
   };
 
+  const reload = () => {
+    fetch(`/api/workspace?version=${version}`)
+      .then((r) => r.json())
+      .then((d) => setStories(Array.isArray(d.stories) ? d.stories : []))
+      .catch(() => {});
+    if (activeId)
+      fetch(`/api/arc?story_id=${encodeURIComponent(activeId)}`)
+        .then((r) => r.json())
+        .then((d) => setArc(Array.isArray(d.characters) ? d.characters : []))
+        .catch(() => {});
+  };
+
+  // Deterministic tool run (server-side, version-aware), then refresh the view.
+  const runTool = async (label: string, tool: string, args: any) => {
+    if (running) return;
+    setRunning(label);
+    try {
+      await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool, args }),
+      });
+    } catch {
+      /* ignore */
+    } finally {
+      setRunning("");
+      reload();
+    }
+  };
+
   // Context actions change with the selection and route through the copilot.
   const sceneText =
     sel.type === "scene"
@@ -157,9 +188,9 @@ export default function Studio() {
   const contextActions: { label: string; run: () => void }[] =
     sel.type === "scene"
       ? [
-          { label: "✎ Revise scene", run: () => send(`Use rewrite_scene to improve ${sel.id} (target_axis cortisol, scene_id "${sel.id}"). Scene text:\n\n${sceneText}`) },
-          { label: "🔍 Re-score", run: () => send(`Use review_narrative (scope scene, scene_id "${sel.id}") on this text:\n\n${sceneText}`) },
-          { label: "🎭 Character debate", run: () => send(`Run batch_revise_pathologies on this project (async) to convene the Character Writer's Room.`) },
+          { label: running === "revise" ? "…revising" : "✎ Revise scene", run: () => runTool("revise", "rewrite_scene", { story_id: activeId, scene_id: sel.id, scene_text: sceneText, target_axis: "cortisol", version }) },
+          { label: running === "rescore" ? "…scoring" : "🔍 Re-score", run: () => runTool("rescore", "review_narrative", { story_id: activeId, scene_id: sel.id, text: sceneText, scope: "scene" }) },
+          { label: "🎭 Character debate", run: () => send(`Run batch_revise_pathologies on this project (async, version "${version}") to convene the Character Writer's Room.`) },
         ]
       : sel.type === "character"
         ? [

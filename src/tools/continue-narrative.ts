@@ -57,6 +57,9 @@ export async function executeContinueNarrative(args: any) {
     const architecture =
       (await workspaceExporter.readArchitectureBrief(story_id)) ||
       "Architecture brief not found.";
+    const worldBible =
+      (await workspaceExporter.readWorldBible(story_id)) ||
+      "No world bible on record.";
     const rawPrevious = await workspaceExporter.readDraft(
       story_id,
       previous_scene_id,
@@ -126,10 +129,13 @@ export async function executeContinueNarrative(args: any) {
 
     const systemPrompt = `You are a masterful storyteller. Your task is to write the NEXT scene in this story.
 
+=== WORLD BIBLE (canon rules — NEVER violate the CORE RULES & CONSTRAINTS) ===
+${worldBible}
+
 === ARCHITECTURE BRIEF ===
 ${architecture}
 
-=== WORLD BIBLE LORE ===
+=== WORLD BIBLE LORE (semantic excerpts) ===
 ${worldLoreContext}
 
 === CANON CAST (use ONLY these as named characters; do NOT introduce new named primary characters) ===
@@ -153,6 +159,7 @@ ${user_direction || "Continue the narrative naturally, maintaining the tone, cha
 Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.
 Use ONLY the canon cast above for named characters — develop them, do not replace them with newly-invented primary characters.
 Honor the CHARACTER STATE SHEETS: each character's location, what they know, what they are holding, and their relationships must stay consistent with their recorded state unless this scene deliberately changes them (and if it does, the change must be shown).
+Obey the WORLD BIBLE's CORE RULES & CONSTRAINTS absolutely — the world's logic (how its central mechanic works, its limits and costs) is canon law and must never be contradicted.
 CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for AI dialogue or output. If CodeWhisper communicates in code, integrate it naturally into the prose (e.g., using italics or standard quotes). The final output must read like a traditional novel, not a GitHub README.`;
 
     const newDraft = await aiRouter.generateCompletion({

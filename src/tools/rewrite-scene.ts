@@ -25,6 +25,11 @@ export const rewriteSceneDef = {
         items: { type: "string" },
         description: "Characters in the scene",
       },
+      version: {
+        type: "string",
+        description: "Draft version to write the rewrite to (default 'v1')",
+        default: "v1",
+      },
     },
     required: ["scene_text"],
   },
@@ -68,6 +73,7 @@ export async function executeRewriteScene(args: any) {
     target_axis = "cortisol",
     story_id = "default_story",
     scene_id = "scene_rewrite",
+    version = "v1",
   } = args;
 
   try {
@@ -82,9 +88,13 @@ export async function executeRewriteScene(args: any) {
       userMessage: "Provide the rewritten scene.",
     });
 
-    await workspaceExporter.saveDraft(story_id, scene_id, rewrittenDraft);
+    await workspaceExporter.saveDraft(story_id, scene_id, rewrittenDraft, version);
 
-    // 3. Score AFTER and persist the updated diagnostic.
+    // 3. Recompile that version's manuscript so the change shows in the draft.
+    const compiled = await workspaceExporter.readAllDrafts(story_id, version);
+    await workspaceExporter.saveManuscript(story_id, compiled, version);
+
+    // 4. Score AFTER and persist the updated diagnostic.
     const after = await scoreAxes(rewrittenDraft);
     await workspaceExporter.saveDiagnosticReport(
       story_id,
@@ -103,7 +113,7 @@ export async function executeRewriteScene(args: any) {
       content: [
         {
           type: "text",
-          text: `Scene rewritten focusing on ${target_axis}${delta} and saved for story: ${story_id}, scene: ${scene_id}. Before: ${fmt(before)}. After: ${fmt(after)}.`,
+          text: `Scene rewritten focusing on ${target_axis}${delta} and saved to ${story_id}/${version}/${scene_id}; manuscript (${version}) recompiled. Before: ${fmt(before)}. After: ${fmt(after)}.`,
         },
       ],
     };

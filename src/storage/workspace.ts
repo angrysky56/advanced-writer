@@ -95,6 +95,21 @@ export class WorkspaceExporter {
     await fs.promises.writeFile(filePath, content, "utf8");
     return filePath;
   }
+  async readWorldBible(storyName: string): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "structure",
+      "world-bible.md",
+    );
+    try {
+      return await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      return null;
+    }
+  }
+
   async readArchitectureBrief(storyName: string): Promise<string | null> {
     const storySlug = this.sanitizeFilename(storyName);
     const filePath = path.join(

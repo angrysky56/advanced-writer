@@ -31,13 +31,14 @@ export async function executeBuildWorldBible(args: any) {
 === PREMISE ===
 ${world_premise}
 
-You must break down your world-building into EXACTLY four sections. Make the lore gritty, grounded, and rich with sensory details and political tension.
-1. FACTIONS & POWER: Who holds control? Who is rebelling?
-2. TECH & MAGIC: What are the physical rules of the world? How do people survive?
-3. ECONOMICS & POLITICS: How do people trade? What is the currency? What are the laws?
-4. GEOGRAPHY & LOCATIONS: Describe the environment, architecture, and specific notable locations.
+You must break down your world-building into EXACTLY five sections. Make the lore gritty, grounded, and rich with sensory details and political tension.
+1. CORE RULES & CONSTRAINTS: The hard logic of this world that the story must NEVER violate — how the central premise/mechanic works, its strict limits, its costs, and what is impossible. State these as unambiguous, testable rules (e.g. "Extraction only works on people history has already erased; aborting a mission leaves them dead. You cannot save anyone who is recorded as having survived."). This section is canon law.
+2. FACTIONS & POWER: Who holds control? Who is rebelling?
+3. TECH & MAGIC: What are the physical rules of the world? How do people survive?
+4. ECONOMICS & POLITICS: How do people trade? What is the currency? What are the laws?
+5. GEOGRAPHY & LOCATIONS: Describe the environment, architecture, and specific notable locations.
 
-Format each section with a clear markdown heading (e.g. "## 1. FACTIONS & POWER").`;
+Format each section with a clear markdown heading (e.g. "## 1. CORE RULES & CONSTRAINTS"). The CORE RULES section is the most important — be precise and internally consistent.`;
 
     const worldBible = await aiRouter.generateCompletion({
       taskType: "brainstorm",
