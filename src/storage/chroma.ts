@@ -15,6 +15,7 @@ export class ChromaStorage {
   public scenes!: Collection;
   public archetypes!: Collection;
   public lore!: Collection;
+  public beats!: Collection;
 
   constructor() {
     this.client = new ChromaClient({
@@ -49,6 +50,44 @@ export class ChromaStorage {
       name: "lore",
       embeddingFunction: ollamaEmbeddingFunction,
     });
+    this.beats = await this.client.getOrCreateCollection({
+      name: "beats",
+      embeddingFunction: ollamaEmbeddingFunction,
+    });
+  }
+
+  /** Embed one arc beat so it can be semantically retrieved while drafting. */
+  async addBeat(
+    id: string,
+    story_id: string,
+    order: number,
+    document: string,
+  ) {
+    try {
+      await this.beats.upsert({
+        ids: [id],
+        documents: [document],
+        metadatas: [{ story_id, order, created_at: new Date().toISOString() }],
+      });
+    } catch (e) {
+      console.error("Chroma upsert beat error:", e);
+    }
+  }
+
+  async searchBeats(query: string, nResults: number = 2): Promise<string[]> {
+    try {
+      const results = await this.beats.query({
+        queryTexts: [query],
+        nResults,
+      });
+      if (results.documents && results.documents[0]) {
+        return results.documents[0].filter((d: any) => d !== null) as string[];
+      }
+      return [];
+    } catch (e) {
+      console.error("Chroma search beats error:", e);
+      return [];
+    }
   }
 
   async addCharacter(record: CharacterRecord) {

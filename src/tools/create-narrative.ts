@@ -5,6 +5,12 @@ import { executeContinueNarrative } from "./continue-narrative.js";
 import { generateAndSeedCast } from "./_cast.js";
 import { recordSceneTracking } from "./_tracking.js";
 import { executeBuildWorldBible } from "./build-world-bible.js";
+import {
+  generateAndSeedArc,
+  checkWorldModelConsistency,
+  formatBeatDirective,
+} from "./_arc.js";
+import { enforceSceneConsistency } from "./_gate.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 import { loadCraftDirectives, NAMING_RULE } from "../ai/craft.js";
 
@@ -149,13 +155,38 @@ ${castBrief}`;
       worldBible = "";
     }
 
-    // 4. Draft Scene 1 — using the canon cast and obeying the world rules.
-    const draftPrompt = `Write the opening scene for this story.
+    // 3b. ARC SCAFFOLD — build the ordered beat timeline (sheet + graph + Chroma),
+    // then REASON over the world model + arc for self-consistency BEFORE any prose
+    // is written. The draft loop walks this spine; consistency repairs (rule
+    // clarifications, beat fixes) land in the world bible / arc up front.
+    const beats = await generateAndSeedArc(
+      storyName,
+      storyIdea,
+      castBrief,
+      worldBible,
+      args.target_length || "short_story",
+    );
+    const consistency = await checkWorldModelConsistency(
+      storyName,
+      worldBible,
+      beats,
+    );
+    const arc = consistency.beats;
+    // Reload the world bible in case the consistency pass appended rule addenda.
+    worldBible = (await workspaceExporter.readWorldBible(storyName)) || worldBible;
+
+    // 4. Draft Scene 1 — to BEAT 1, using the canon cast and obeying the rules.
+    const beat1 = arc[0] || null;
+    const beat1Directive = formatBeatDirective(beat1);
+    const draftPrompt = `Write the opening scene for this story, delivering the beat below.
 
 === AUTHOR'S STORY IDEA (the source of truth — honor it) ===
 ${storyIdea}
 
 Tone: ${tone}
+
+=== THIS SCENE'S BEAT (write THIS) ===
+${beat1Directive || "Open the story."}
 
 === CRAFT DIRECTIVES (apply these WHILE writing) ===
 ${loadCraftDirectives()}
@@ -167,15 +198,25 @@ CANON CAST — use these characters by name; do NOT invent new named primary cha
 ${castBrief}
 
 ${NAMING_RULE}`;
-    const draft = await aiRouter.generateCompletion({
+    let draft = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt: draftPrompt,
-      userMessage: `Write Scene 1. Use these EXACT character names — do NOT invent or rename anyone: ${cast
+      userMessage: `Write Scene 1 (Beat 1). Use these EXACT character names — do NOT invent or rename anyone: ${cast
         .map((c) => `${c.meta.name} (${c.meta.role})`)
         .join(
           "; ",
         )}. The point-of-view protagonist is ${cast[0]?.meta?.name || "the protagonist"} — refer to her/him by that exact name throughout.`,
     });
+
+    // Per-scene CONSISTENCY GATE: verify scene 1 against the rules + beat before
+    // accepting it; revise in place if it violates something (bounded retries).
+    const gate1 = await enforceSceneConsistency({
+      sceneText: draft,
+      worldBible,
+      beatDirective: beat1Directive,
+    });
+    draft = gate1.text;
+
     await workspaceExporter.saveDraft(storyName, "scene_1", draft);
 
     await chromaStorage
@@ -215,22 +256,20 @@ ${NAMING_RULE}`;
     );
 
     if (args.mode === "fast-auto") {
-      const targetCounts: Record<string, number> = {
-        short_story: 3,
-        book_of_poems: 4,
-        novella: 5,
-        screenplay: 5,
-        novel: 8,
-      };
-      const maxScenes = targetCounts[args.target_length] || 3;
+      // One scene per beat — walk the arc timeline instead of a fixed count.
+      const maxScenes = arc.length;
 
       let lastGood = 1;
       for (let i = 2; i <= maxScenes; i++) {
+        const beat = arc[i - 1] || null;
         const res: any = await executeContinueNarrative({
           story_id: storyName,
           previous_scene_id: `scene_${i - 1}`,
           next_scene_id: `scene_${i}`,
-          user_direction: `Continue drafting scene ${i} of ${maxScenes} for a ${args.target_length}.`,
+          beat_order: i,
+          user_direction: beat
+            ? formatBeatDirective(beat)
+            : `Continue drafting scene ${i} of ${maxScenes} for a ${args.target_length}.`,
         });
         // Stop the chain on failure rather than silently producing orphaned
         // or disconnected scenes downstream.

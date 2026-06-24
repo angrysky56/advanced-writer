@@ -2,19 +2,25 @@ import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
+import { executeBuildWorldBible } from "./build-world-bible.js";
 import { generateAndSeedCast } from "./_cast.js";
+import {
+  generateAndSeedArc,
+  checkWorldModelConsistency,
+  formatBeatDirective,
+} from "./_arc.js";
 
 export const expandToNovelDef = {
   name: "expand_to_novel",
   description:
-    "Expands a brief synopsis into a structured Beat Sheet, and optionally automatically drafts the entire manuscript scene by scene.",
+    "Expands a synopsis into a structured ARC (beat-sheet scaffold seeded into the graph timeline + Chroma), runs a world-model self-consistency check, and optionally auto-drafts the whole manuscript beat by beat with the per-scene continuity gate.",
   inputSchema: {
     type: "object",
     properties: {
       story_id: { type: "string", description: "Identifier for the story" },
       synopsis: {
         type: "string",
-        description: "A 1-3 page summary of the story",
+        description: "A 1-3 page summary of the story (the author's full idea)",
       },
       target_length: {
         type: "string",
@@ -24,7 +30,7 @@ export const expandToNovelDef = {
       auto_draft: {
         type: "boolean",
         description:
-          "If true, it will loop through the generated beat sheet and draft EVERY scene consecutively. WARNING: Can take an hour+ for a novel.",
+          "If true, walk the arc and draft EVERY beat consecutively (each through the consistency gate). WARNING: can take an hour+ for a novel.",
         default: false,
       },
       version: {
@@ -53,44 +59,28 @@ export async function executeExpandToNovel(args: any) {
   } = args;
 
   try {
-    // 1. Explode Synopsis into Beat Sheet
-    const beatSheetPrompt = `You are a master structural editor. Explode the following synopsis into a highly detailed Scene-by-Scene Beat Sheet for a ${target_length}.
-
-=== SYNOPSIS ===
-${synopsis}
-
-Your output MUST be a numbered list of scenes. Each scene must have a brief description of what happens, the emotional shift, and the characters involved. Do not write the scenes themselves, only the outline.
-Example:
-1. Scene 1: [Description]
-2. Scene 2: [Description]
-`;
-
-    const beatSheetContent = await aiRouter.generateCompletion({
-      taskType: "brainstorm",
-      systemPrompt: beatSheetPrompt,
-      userMessage: "Generate the full Beat Sheet.",
-    });
-
-    await workspaceExporter.saveBeatSheet(story_id, beatSheetContent);
-
-    if (!auto_draft) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Beat Sheet generated and saved to workspace for ${story_id}. You can review it before drafting.`,
-          },
-        ],
-      };
+    // 1. CAST first — the arc and world bible are built AROUND it. Reuse the
+    // existing cast if the story already has one; otherwise seed from the
+    // synopsis (the author's full idea, not a one-liner).
+    let cast = await neo4jStorage.getCharactersForStory(story_id);
+    if (!cast || cast.length === 0) {
+      await generateAndSeedCast(story_id, synopsis);
+      cast = await neo4jStorage.getCharactersForStory(story_id);
     }
+    const castBrief =
+      (cast || [])
+        .map(
+          (c: any) =>
+            `- ${c.name}${c.role ? ` — ${c.role}` : ""}${c.archetype ? `; archetype: ${c.archetype}` : ""}`,
+        )
+        .join("\n") || "(no cast on record)";
 
-    // 2. Ensure the story has memory to draw on BEFORE drafting.
-    // Without a seeded cast + architecture brief, continue_narrative draws on
-    // an empty graph state and drifts. Seed them if they don't already exist.
+    // 2. Architecture brief (intent/outline) — keep an existing one, else make a
+    // concise one bound to the cast so continue_narrative has the story's intent.
     const existingArch =
       await workspaceExporter.readArchitectureBrief(story_id);
     if (!existingArch) {
-      const archPrompt = `You are an expert story architect. Build a concise story architecture brief for a ${target_length} based on this synopsis.\n\nSynopsis: ${synopsis}`;
+      const archPrompt = `You are an expert story architect. Build a concise story architecture brief for a ${target_length}, based on the author's synopsis and using ONLY the established cast (invent no new named characters).\n\n=== SYNOPSIS ===\n${synopsis}\n\n=== CAST ===\n${castBrief}`;
       const arch = await aiRouter.generateCompletion({
         taskType: "generation",
         systemPrompt: archPrompt,
@@ -99,38 +89,69 @@ Example:
       await workspaceExporter.saveArchitectureBrief(story_id, arch);
     }
 
-    const existingCast = await neo4jStorage.getCharactersForStory(story_id);
-    if (!existingCast || existingCast.length === 0) {
-      await generateAndSeedCast(story_id, synopsis);
+    // 3. World bible (continuity ledger seed) — build bound to the cast if absent.
+    let worldBible = (await workspaceExporter.readWorldBible(story_id)) || "";
+    if (!worldBible) {
+      try {
+        await executeBuildWorldBible({
+          story_id,
+          world_premise: `${synopsis}\n\nFormat/length: ${target_length}.`,
+          cast_brief: castBrief,
+        });
+        worldBible = (await workspaceExporter.readWorldBible(story_id)) || "";
+      } catch {
+        worldBible = "";
+      }
     }
 
-    // 3. Auto-Draft the entire Beat Sheet.
-    // Parse the numbered list to figure out how many scenes to generate.
-    const beatLines = beatSheetContent
-      .split("\n")
-      .filter((line) => /^\d+\./.test(line.trim()));
-    const totalScenes = beatLines.length > 0 ? beatLines.length : 10; // fallback if parse fails
+    // 4. ARC SCAFFOLD — explode the synopsis into an ordered beat timeline scaled
+    // to length (sheet + graph (:Beat)-[:NEXT]-> chain + Chroma), then REASON over
+    // the world model + arc for self-consistency before any drafting.
+    const beats = await generateAndSeedArc(
+      story_id,
+      synopsis,
+      castBrief,
+      worldBible,
+      target_length,
+    );
+    const consistency = await checkWorldModelConsistency(
+      story_id,
+      worldBible,
+      beats,
+    );
+    const arc = consistency.beats;
 
+    if (!auto_draft) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Arc scaffold generated for ${story_id}: ${arc.length} beats seeded into the beat sheet, the graph timeline, and Chroma${consistency.consistent ? "" : " (world-model consistency issues were found and repaired — see structure/world-model-consistency.md)"}. Review the beat sheet, then rerun with auto_draft=true to draft it.`,
+          },
+        ],
+      };
+    }
+
+    // 5. Auto-draft — walk the arc beat by beat. Each scene goes through
+    // continue_narrative, which loads only that beat's related nodes and runs the
+    // per-scene continuity gate before saving.
     let drafted = 0;
-    for (let i = 1; i <= totalScenes; i++) {
-      const beatDescription = beatLines[i - 1] || `Write scene ${i}`;
-
+    for (let i = 1; i <= arc.length; i++) {
+      const beat = arc[i - 1] || null;
       const res: any = await executeContinueNarrative({
-        story_id: story_id,
+        story_id,
         previous_scene_id: i === 1 ? "none" : `scene_${i - 1}`,
         next_scene_id: `scene_${i}`,
-        user_direction: `Follow this beat perfectly: ${beatDescription}`,
-        version: version,
+        beat_order: i,
+        user_direction: beat
+          ? formatBeatDirective(beat)
+          : `Write scene ${i} of ${arc.length}.`,
+        version,
       });
 
-      // Stop on failure instead of silently dropping scenes and breaking the
-      // previous-scene chain for everything that follows.
+      // Stop on failure, but compile what exists so partial work isn't lost.
       if (res?.isError) {
-        // Still compile what we have so the partial work isn't lost.
-        const partial = await workspaceExporter.readAllDrafts(
-          story_id,
-          version,
-        );
+        const partial = await workspaceExporter.readAllDrafts(story_id, version);
         await workspaceExporter.saveManuscript(story_id, partial, version);
         return {
           content: [
@@ -145,8 +166,7 @@ Example:
       drafted++;
     }
 
-    // 4. Compile the Manuscript programmatically (no LLM "stitch" call) to
-    // avoid token truncation on long works.
+    // 6. Compile the manuscript programmatically (no LLM stitch).
     const finalManuscript = await workspaceExporter.readAllDrafts(
       story_id,
       version,
@@ -157,7 +177,7 @@ Example:
       content: [
         {
           type: "text",
-          text: `Massive Expansion Complete! Generated ${drafted} scenes from the Beat Sheet and compiled the final ${target_length} manuscript for ${story_id}.`,
+          text: `Expansion complete! Walked ${arc.length} beats and drafted ${drafted} scenes (each through the consistency gate), then compiled the final ${target_length} manuscript for ${story_id}.`,
         },
       ],
     };

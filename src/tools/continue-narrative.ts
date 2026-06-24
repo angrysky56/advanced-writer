@@ -5,6 +5,8 @@ import { chromaStorage } from "../storage/chroma.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 import { loadCraftDirectives, NAMING_RULE } from "../ai/craft.js";
 import { recordSceneTracking, buildScratchpadContext } from "./_tracking.js";
+import { formatBeatDirective } from "./_arc.js";
+import { enforceSceneConsistency } from "./_gate.js";
 
 export const continueNarrativeDef = {
   name: "continue_narrative",
@@ -31,6 +33,11 @@ export const continueNarrativeDef = {
         description:
           "Optional feedback or direction for where the story should go next",
       },
+      beat_order: {
+        type: "number",
+        description:
+          "Optional 1-based index of the arc beat this scene delivers. If given (or inferable from the scene number), the engine loads that beat and only its related nodes (characters present, location) instead of the whole graph.",
+      },
       async: {
         type: "boolean",
         description:
@@ -49,6 +56,7 @@ export async function executeContinueNarrative(args: any) {
     next_scene_id,
     user_direction = "",
     version = "v1",
+    beat_order,
   } = args;
 
   try {
@@ -104,10 +112,39 @@ export async function executeContinueNarrative(args: any) {
         )
         .join("\n") || "No cast on record yet.";
 
-    // Each character's living continuity sheet, read back before writing.
-    const scratchpadContext = buildScratchpadContext(
-      storyState.characters || [],
-    );
+    // BEAT-DRIVEN context: figure out which beat this scene delivers, then pull
+    // the beat plus ONLY its related nodes (characters present + location) rather
+    // than dumping the whole graph. Falls back gracefully if no arc exists.
+    const order =
+      typeof beat_order === "number"
+        ? beat_order
+        : parseInt(String(next_scene_id).replace(/\D/g, ""), 10) || null;
+    let beatCtx: any = null;
+    if (order) {
+      try {
+        beatCtx = await neo4jStorage.getBeatContext(story_id, order);
+      } catch {
+        beatCtx = null;
+      }
+    }
+    const beatDirective =
+      beatCtx && beatCtx.beat
+        ? formatBeatDirective({
+            ...beatCtx.beat,
+            characters_present: (beatCtx.characters || []).map(
+              (c: any) => c.name,
+            ),
+            establishes: "",
+          })
+        : "";
+
+    // Scope the continuity sheets to the characters present in THIS beat when we
+    // know them; otherwise show the whole cast's sheets.
+    const presentChars =
+      beatCtx && beatCtx.characters && beatCtx.characters.length
+        ? beatCtx.characters
+        : storyState.characters || [];
+    const scratchpadContext = buildScratchpadContext(presentChars);
 
     const semanticScenes = await chromaStorage.searchScenes(
       user_direction || "next scene",
@@ -132,6 +169,7 @@ export async function executeContinueNarrative(args: any) {
 === CRAFT DIRECTIVES (apply these WHILE writing — do not produce prose that violates them) ===
 ${loadCraftDirectives()}
 
+${beatDirective ? `=== THIS SCENE'S BEAT (write THIS — deliver this beat and its turn) ===\n${beatDirective}\n` : ""}
 === WORLD CONTINUITY LEDGER (facts the story has ALREADY established — a reference to stay consistent with and verify against, NOT the source you write from) ===
 ${worldBible}
 
@@ -157,7 +195,7 @@ ${plotContext}
 ${previousScene}
 
 === USER DIRECTION / FEEDBACK ===
-${user_direction || "Continue the narrative naturally, maintaining the tone, character voices, and momentum."}
+${beatDirective ? "Deliver the beat above. Maintain tone, character voices, and momentum." : user_direction || "Continue the narrative naturally, maintaining the tone, character voices, and momentum."}
 
 Maintain the established prose style. Do not summarize the previous scene; pick up where it left off or transition smoothly to the next logical point in the story.
 Use ONLY the canon cast above for named characters — develop them, do not replace them with newly-invented primary characters.
@@ -170,11 +208,21 @@ CRITICAL FORMATTING RULE: Do NOT use markdown code blocks (triple backticks) for
       (storyState.characters || [])
         .map((c: any) => `${c.name}${c.role ? ` (${c.role})` : ""}`)
         .join("; ") || "(use the canon cast above)";
-    const newDraft = await aiRouter.generateCompletion({
+    let newDraft = await aiRouter.generateCompletion({
       taskType: "generation",
       systemPrompt,
       userMessage: `Write the new scene (${next_scene_id}). Use these EXACT character names — do NOT invent or rename anyone: ${castNames}.`,
     });
+
+    // Per-scene CONSISTENCY GATE: verify against world rules + ledger + the beat
+    // BEFORE saving; revise in place if it breaks something (bounded retries), so
+    // the scene never ships broken to be caught only in a later review.
+    const gate = await enforceSceneConsistency({
+      sceneText: newDraft,
+      worldBible,
+      beatDirective,
+    });
+    newDraft = gate.text;
 
     await workspaceExporter.saveDraft(
       story_id,

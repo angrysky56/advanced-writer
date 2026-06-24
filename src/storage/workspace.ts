@@ -85,6 +85,34 @@ export class WorkspaceExporter {
     return filePath;
   }
 
+  async readBeatSheet(storyName: string): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "structure",
+      "beat-sheet.md",
+    );
+    try {
+      return await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      return null;
+    }
+  }
+
+  /** Save the world-model self-consistency report (rules + arc reasoning pass). */
+  async saveConsistencyReport(
+    storyName: string,
+    content: string,
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "structure");
+    await this.ensureDir(dir);
+    const filePath = path.join(dir, "world-model-consistency.md");
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
+
   async saveDiagnosticReport(
     storyName: string,
     sceneId: string,

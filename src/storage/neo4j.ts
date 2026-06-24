@@ -365,6 +365,191 @@ export class Neo4jStorage {
     }
   }
 
+  // ===== Story ARC / timeline (Beat nodes) =====
+  // The arc scaffold lives in the graph as an ordered chain of Beat nodes:
+  //   (:Beat)-[:NEXT]->(:Beat)   the timeline the draft loop walks
+  //   (:Beat)-[:FEATURES]->(:Character)   who is present in the beat
+  //   (:Beat)-[:AT]->(:Entity)   the beat's location
+  // so the engine can pull a beat plus ONLY its related nodes before writing it.
+
+  async createBeatNode(
+    storyId: string,
+    beat: {
+      order: number;
+      act?: string;
+      title?: string;
+      summary?: string;
+      turn?: string;
+      location?: string;
+    },
+  ): Promise<string> {
+    const id = `${storyId}_beat_${beat.order}`;
+    const session = this.getSession();
+    try {
+      await session.run(
+        `
+        MERGE (b:Beat { id: $id })
+        SET b += {
+          story_ids: [$storyId],
+          order: $order,
+          act: $act,
+          title: $title,
+          summary: $summary,
+          turn: $turn,
+          location: $location
+        }
+        `,
+        {
+          id,
+          storyId,
+          order: Math.trunc(beat.order),
+          act: beat.act || "",
+          title: beat.title || "",
+          summary: beat.summary || "",
+          turn: beat.turn || "",
+          location: beat.location || "",
+        },
+      );
+    } finally {
+      await session.close();
+    }
+    return id;
+  }
+
+  async linkBeatNext(prevBeatId: string, nextBeatId: string) {
+    const session = this.getSession();
+    try {
+      await session.run(
+        `MATCH (a:Beat {id:$a}) MATCH (b:Beat {id:$b}) MERGE (a)-[:NEXT]->(b)`,
+        { a: prevBeatId, b: nextBeatId },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async linkBeatCharacter(
+    beatId: string,
+    characterName: string,
+    storyId: string,
+  ) {
+    const session = this.getSession();
+    try {
+      await session.run(
+        `
+        MATCH (b:Beat {id:$beatId})
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids AND (
+          toLower(c.name) = toLower($name)
+          OR toLower(c.name) CONTAINS toLower($name)
+          OR toLower($name) CONTAINS toLower(c.name)
+        )
+        WITH b, c LIMIT 1
+        MERGE (b)-[:FEATURES]->(c)
+        `,
+        { beatId, name: characterName, storyId },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async linkBeatLocation(
+    beatId: string,
+    locationName: string,
+    storyId: string,
+  ) {
+    const session = this.getSession();
+    try {
+      const locId = `${storyId}_entity_${locationName.replace(/\s+/g, "_").toLowerCase()}`;
+      await session.run(
+        `
+        MERGE (e:Entity { id: $locId })
+        ON CREATE SET e.story_ids = [$storyId], e.name = $name, e.type = 'Location'
+        ON MATCH SET e.story_ids = CASE WHEN NOT $storyId IN e.story_ids THEN e.story_ids + $storyId ELSE e.story_ids END
+        WITH e
+        MATCH (b:Beat {id:$beatId})
+        MERGE (b)-[:AT]->(e)
+        `,
+        { beatId, locId, storyId, name: locationName },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  /** The full ordered arc (lean projection) for planning/checks. */
+  async getArc(storyId: string): Promise<any[]> {
+    const session = this.getSession();
+    try {
+      const res = await session.run(
+        `MATCH (b:Beat) WHERE $storyId IN b.story_ids RETURN b ORDER BY b.order`,
+        { storyId },
+      );
+      return res.records.map((r) => {
+        const p = r.get("b").properties;
+        return {
+          order: typeof p.order?.toNumber === "function" ? p.order.toNumber() : p.order,
+          act: p.act,
+          title: p.title,
+          summary: p.summary,
+          turn: p.turn,
+          location: p.location,
+        };
+      });
+    } catch (e) {
+      console.error("Neo4j getArc error:", e);
+      return [];
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * A single beat PLUS only the nodes related to it — the characters featured in
+   * it (with their live scratchpads) and its location. This is what the draft
+   * loop loads before writing the scene, instead of dumping the whole graph.
+   */
+  async getBeatContext(storyId: string, order: number): Promise<any | null> {
+    const session = this.getSession();
+    try {
+      const res = await session.run(
+        `
+        MATCH (b:Beat)
+        WHERE $storyId IN b.story_ids AND b.order = $order
+        OPTIONAL MATCH (b)-[:FEATURES]->(c:Character)
+        OPTIONAL MATCH (b)-[:AT]->(loc:Entity)
+        RETURN b,
+          collect(DISTINCT { name: c.name, role: c.role, current_state: c.current_state, scratchpad: c.scratchpad }) AS chars,
+          head(collect(DISTINCT { name: loc.name, description: loc.description })) AS location
+        `,
+        { storyId, order: Math.trunc(order) },
+      );
+      if (res.records.length === 0) return null;
+      const rec = res.records[0];
+      const p = rec.get("b").properties;
+      const chars = (rec.get("chars") || []).filter((c: any) => c && c.name);
+      const location = rec.get("location");
+      return {
+        beat: {
+          order: typeof p.order?.toNumber === "function" ? p.order.toNumber() : p.order,
+          act: p.act,
+          title: p.title,
+          summary: p.summary,
+          turn: p.turn,
+          location: p.location,
+        },
+        characters: chars,
+        location: location && location.name ? location : null,
+      };
+    } catch (e) {
+      console.error("Neo4j getBeatContext error:", e);
+      return null;
+    } finally {
+      await session.close();
+    }
+  }
+
   async getCharacterById(characterId: string): Promise<any | null> {
     const session = this.getSession();
     try {
