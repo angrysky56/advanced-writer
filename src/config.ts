@@ -11,10 +11,13 @@ config({ path: join(__dirname, "../.env"), quiet: true });
 const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
+  OLLAMA_EMBEDDING_MODEL: z.string().default("nomic-embed-text:latest"),
   MODEL_GENERATION: z.string(),
   MODEL_DIAGNOSTIC: z.string(),
   MODEL_BRAINSTORM: z.string(),
   CHROMA_PERSIST_DIR: z.string().default("./data/chroma"),
+  CHROMA_HOST: z.string().default("localhost"),
+  CHROMA_PORT: z.coerce.number().default(8001),
   NEO4J_URI: z.string().default("bolt://localhost:7687"),
   NEO4J_USER: z.string().default("neo4j"),
   NEO4J_PASSWORD: z.string().optional().default(""), // Make optional for dev

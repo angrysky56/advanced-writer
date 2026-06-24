@@ -1,5 +1,6 @@
 import { ChromaClient, Collection } from "chromadb";
 import { ENV } from "../config.js";
+import { ollamaClient } from "../ai/ollama.js";
 import {
   CharacterRecord,
   StoryRecord,
@@ -16,22 +17,38 @@ export class ChromaStorage {
   public lore!: Collection;
 
   constructor() {
-    // Note: The JS chromadb client typically connects to a running Chroma server
-    // (e.g., via Docker) or uses a local path if supported by the specific version.
-    this.client = new ChromaClient({ host: "localhost", port: 8000 });
+    this.client = new ChromaClient({
+      host: ENV.CHROMA_HOST,
+      port: ENV.CHROMA_PORT,
+    });
   }
 
   async initialize() {
+    const ollamaEmbeddingFunction = {
+      generate: async (texts: string[]) => {
+        return ollamaClient.getEmbeddings(ENV.OLLAMA_EMBEDDING_MODEL, texts);
+      },
+    };
+
     this.characters = await this.client.getOrCreateCollection({
       name: "characters",
+      embeddingFunction: ollamaEmbeddingFunction,
     });
-    this.stories = await this.client.getOrCreateCollection({ name: "stories" });
-    this.scenes = await this.client.getOrCreateCollection({ name: "scenes" });
+    this.stories = await this.client.getOrCreateCollection({
+      name: "stories",
+      embeddingFunction: ollamaEmbeddingFunction,
+    });
+    this.scenes = await this.client.getOrCreateCollection({
+      name: "scenes",
+      embeddingFunction: ollamaEmbeddingFunction,
+    });
     this.archetypes = await this.client.getOrCreateCollection({
       name: "archetypes",
+      embeddingFunction: ollamaEmbeddingFunction,
     });
     this.lore = await this.client.getOrCreateCollection({
       name: "lore",
+      embeddingFunction: ollamaEmbeddingFunction,
     });
   }
 

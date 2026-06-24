@@ -26,7 +26,9 @@ export class WorkspaceExporter {
     let candidate = name;
     let n = 2;
     while (
-      fs.existsSync(path.join(this.baseDir, this.sanitizeFilename(candidate))) &&
+      fs.existsSync(
+        path.join(this.baseDir, this.sanitizeFilename(candidate)),
+      ) &&
       n < 1000
     ) {
       candidate = `${name}_${n}`;
@@ -142,7 +144,11 @@ export class WorkspaceExporter {
     facts: string[],
   ): Promise<void> {
     const clean = (facts || [])
-      .map((f) => String(f || "").replace(/\s+/g, " ").trim())
+      .map((f) =>
+        String(f || "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
       .filter((f) => f.length > 0);
     if (clean.length === 0) return;
 

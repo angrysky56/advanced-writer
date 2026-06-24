@@ -112,9 +112,15 @@ export async function executeApplyStoryscopeRevisions(args: any) {
         sceneId,
         source_version,
       );
-      if (!text) text = await workspaceExporter.readDraft(story_id, sceneId, "v1");
+      if (!text)
+        text = await workspaceExporter.readDraft(story_id, sceneId, "v1");
       if (!text) continue;
-      await workspaceExporter.saveDraft(story_id, sceneId, text, target_version);
+      await workspaceExporter.saveDraft(
+        story_id,
+        sceneId,
+        text,
+        target_version,
+      );
       excerpts.push({
         sceneId,
         excerpt: text.slice(0, 400).replace(/\s+/g, " ").trim(),
@@ -162,7 +168,8 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
         if (r?.scene_id)
           directives.set(
             String(r.scene_id),
-            r.directive || "Apply the StoryScope critique relevant to this scene.",
+            r.directive ||
+              "Apply the StoryScope critique relevant to this scene.",
           );
       }
     }
@@ -173,7 +180,11 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
         story_id,
         target_version,
       );
-      await workspaceExporter.saveManuscript(story_id, compiled0, target_version);
+      await workspaceExporter.saveManuscript(
+        story_id,
+        compiled0,
+        target_version,
+      );
       return {
         content: [
           {
@@ -236,7 +247,11 @@ ${summaryContext}`;
           story_id,
           target_version,
         );
-        await workspaceExporter.saveManuscript(story_id, partial, target_version);
+        await workspaceExporter.saveManuscript(
+          story_id,
+          partial,
+          target_version,
+        );
         return {
           content: [
             {

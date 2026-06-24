@@ -172,7 +172,9 @@ ${NAMING_RULE}`;
       systemPrompt: draftPrompt,
       userMessage: `Write Scene 1. Use these EXACT character names — do NOT invent or rename anyone: ${cast
         .map((c) => `${c.meta.name} (${c.meta.role})`)
-        .join("; ")}. The point-of-view protagonist is ${cast[0]?.meta?.name || "the protagonist"} — refer to her/him by that exact name throughout.`,
+        .join(
+          "; ",
+        )}. The point-of-view protagonist is ${cast[0]?.meta?.name || "the protagonist"} — refer to her/him by that exact name throughout.`,
     });
     await workspaceExporter.saveDraft(storyName, "scene_1", draft);
 
