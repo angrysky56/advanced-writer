@@ -1,6 +1,6 @@
 import { ChromaClient, Collection } from "chromadb";
 import { ENV } from "../config.js";
-import { ollamaClient } from "../ai/ollama.js";
+import { OllamaEmbeddingFunction } from "@chroma-core/ollama";
 import {
   CharacterRecord,
   StoryRecord,
@@ -24,11 +24,10 @@ export class ChromaStorage {
   }
 
   async initialize() {
-    const ollamaEmbeddingFunction = {
-      generate: async (texts: string[]) => {
-        return ollamaClient.getEmbeddings(ENV.OLLAMA_EMBEDDING_MODEL, texts);
-      },
-    };
+    const ollamaEmbeddingFunction = new OllamaEmbeddingFunction({
+      url: ENV.OLLAMA_BASE_URL,
+      model: ENV.OLLAMA_EMBEDDING_MODEL,
+    });
 
     this.characters = await this.client.getOrCreateCollection({
       name: "characters",

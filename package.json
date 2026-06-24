@@ -19,6 +19,7 @@
     "@ai-sdk/anthropic": "^3.0.85",
     "@ai-sdk/openai": "^3.0.73",
     "@ai-sdk/react": "^3.0.210",
+    "@chroma-core/ollama": "^0.1.8",
     "@modelcontextprotocol/sdk": "latest",
     "ai": "^6.0.208",
     "cheerio": "^1.2.0",
@@ -43,7 +44,9 @@
     "vitest": "latest"
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "undici": "^6.27.0",
+    "uuid": "^11.1.1"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
