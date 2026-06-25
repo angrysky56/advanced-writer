@@ -368,14 +368,50 @@ export class WorkspaceExporter {
     }
   }
 
+  /**
+   * Directory a StoryScope review lives in. Reviews are now scoped per draft
+   * version (storyscope-reports/<version>/) so reviewing v2 never overwrites
+   * v1's review. Legacy reviews written before this change live flat in
+   * storyscope-reports/ and are treated as the v1 review (see resolveReportsDir).
+   */
+  private storyscopeDir(storySlug: string, version?: string): string {
+    const root = path.join(this.baseDir, storySlug, "storyscope-reports");
+    return version ? path.join(root, version) : root;
+  }
+
+  /**
+   * Pick the directory to READ a version's review from: the versioned folder if
+   * it exists; otherwise, for v1 only, fall back to the legacy flat folder so
+   * pre-existing reviews remain visible. Returns null when nothing exists.
+   */
+  private resolveReportsDir(storySlug: string, version?: string): string | null {
+    const root = path.join(this.baseDir, storySlug, "storyscope-reports");
+    if (version) {
+      const versioned = path.join(root, version);
+      if (fs.existsSync(versioned)) return versioned;
+      // Legacy flat reviews predate versioning → treat them as the v1 review.
+      if (version === "v1" && fs.existsSync(root)) {
+        // Only if the flat folder actually holds report files (not just the
+        // version subfolders created later).
+        const hasFlat = fs
+          .readdirSync(root)
+          .some((f) => f.endsWith(".md"));
+        if (hasFlat) return root;
+      }
+      return fs.existsSync(versioned) ? versioned : null;
+    }
+    return fs.existsSync(root) ? root : null;
+  }
+
   async saveStoryscopeReport(
     storyName: string,
     aspectName: string,
     content: string,
+    version?: string,
   ): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
     const aspectSlug = this.sanitizeFilename(aspectName);
-    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    const dir = this.storyscopeDir(storySlug, version);
     await this.ensureDir(dir);
 
     const filePath = path.join(dir, `${aspectSlug}.md`);
@@ -386,9 +422,10 @@ export class WorkspaceExporter {
   async saveStoryscopeExecutiveSummary(
     storyName: string,
     content: string,
+    version?: string,
   ): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
-    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    const dir = this.storyscopeDir(storySlug, version);
     await this.ensureDir(dir);
 
     const filePath = path.join(dir, "executive-summary.md");
@@ -399,9 +436,11 @@ export class WorkspaceExporter {
   /** All specialist lens reports (everything except the executive summary). */
   async readAllStoryscopeReports(
     storyName: string,
+    version?: string,
   ): Promise<{ aspect: string; content: string }[]> {
     const storySlug = this.sanitizeFilename(storyName);
-    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    const dir = this.resolveReportsDir(storySlug, version);
+    if (!dir) return [];
     try {
       const files = await fs.promises.readdir(dir);
       const out: { aspect: string; content: string }[] = [];
@@ -419,16 +458,16 @@ export class WorkspaceExporter {
 
   async readStoryscopeExecutiveSummary(
     storyName: string,
+    version?: string,
   ): Promise<string | null> {
     const storySlug = this.sanitizeFilename(storyName);
-    const filePath = path.join(
-      this.baseDir,
-      storySlug,
-      "storyscope-reports",
-      "executive-summary.md",
-    );
+    const dir = this.resolveReportsDir(storySlug, version);
+    if (!dir) return null;
     try {
-      return await fs.promises.readFile(filePath, "utf8");
+      return await fs.promises.readFile(
+        path.join(dir, "executive-summary.md"),
+        "utf8",
+      );
     } catch {
       return null;
     }

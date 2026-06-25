@@ -1265,7 +1265,7 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <a
-              href="/studio"
+              href="/"
               style={{
                 background: "rgba(168, 85, 247, 0.12)",
                 color: "var(--accent-hover)",

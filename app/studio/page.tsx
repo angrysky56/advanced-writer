@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import { useWorkspace } from "../store/workspaceStore";
 
 /* ------------------------------------------------------------------ *
  * Advanced Writer — "Studio" IDE shell (new view, runs alongside the
@@ -145,10 +146,19 @@ function normalizeSceneId(s: string) {
 }
 
 export default function Studio() {
-  const [stories, setStories] = useState<any[]>([]);
-  const [activeId, setActiveId] = useState<string>("");
-  const [version, setVersion] = useState<string>("v1");
-  const [arc, setArc] = useState<any[]>([]);
+  // Shared workspace state lives in the zustand store; every panel subscribes
+  // to the same source instead of fetching independently.
+  const stories = useWorkspace((s) => s.stories);
+  const activeId = useWorkspace((s) => s.activeId);
+  const version = useWorkspace((s) => s.version);
+  const arc = useWorkspace((s) => s.arc);
+  const setActiveId = useWorkspace((s) => s.setActiveId);
+  const setVersion = useWorkspace((s) => s.setVersion);
+  const initWorkspace = useWorkspace((s) => s.init);
+  const refreshStore = useWorkspace((s) => s.refresh);
+  const startPolling = useWorkspace((s) => s.startPolling);
+  const stopPolling = useWorkspace((s) => s.stopPolling);
+
   const [sel, setSel] = useState<Selection>({ type: "manuscript" });
   const [input, setInput] = useState("");
   const [running, setRunning] = useState<string>("");
@@ -157,28 +167,49 @@ export default function Studio() {
   const [diffTextA, setDiffTextA] = useState<string>("");
   const [diffTextB, setDiffTextB] = useState<string>("");
 
-  const { messages, sendMessage, status } = useChat();
+  // ---- hand editing ----
+  const [editing, setEditing] = useState<boolean>(false);
+  const [editText, setEditText] = useState<string>("");
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveMsg, setSaveMsg] = useState<string>("");
+
+  // ---- find / replace ----
+  const [frOpen, setFrOpen] = useState<boolean>(false);
+  const [frFind, setFrFind] = useState<string>("");
+  const [frReplace, setFrReplace] = useState<string>("");
+  const [frMode, setFrMode] = useState<"literal" | "whole-word" | "regex">(
+    "whole-word",
+  );
+  const [frCase, setFrCase] = useState<boolean>(false);
+  const [frScope, setFrScope] = useState<"document" | "story" | "all">("story");
+  const [frBusy, setFrBusy] = useState<boolean>(false);
+  const [frResult, setFrResult] = useState<any>(null);
+  const [frApplied, setFrApplied] = useState<boolean>(false);
+
+  const { messages, sendMessage, status, setMessages } = useChat();
   const busy = status === "submitted" || status === "streaming";
 
-  useEffect(() => {
-    fetch(`/api/workspace?version=${version}`)
-      .then((r) => r.json())
-      .then((d) => {
-        const s = Array.isArray(d.stories) ? d.stories : [];
-        setStories(s);
-        if (s.length && !activeId) setActiveId(s[0].id);
-      })
-      .catch(() => {});
-  }, [version]); // eslint-disable-line
+  // ---- chat history (per-story, persisted) ----
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const [historyTab, setHistoryTab] = useState<"active" | "archived">("active");
+  const [convos, setConvos] = useState<any[]>([]);
+  const [archivedConvos, setArchivedConvos] = useState<any[]>([]);
+  const savedSig = useRef<string>("");
+  const skipNextSave = useRef<boolean>(false);
 
+  // Boot the shared store and start the job poller (which auto-refreshes every
+  // view when a background job finishes). Reference-counted; stops on unmount.
   useEffect(() => {
-    if (!activeId) return;
-    setVersion("v1");
-    fetch(`/api/arc?story_id=${encodeURIComponent(activeId)}`)
-      .then((r) => r.json())
-      .then((d) => setArc(Array.isArray(d.characters) ? d.characters : []))
-      .catch(() => setArc([]));
-    setSel({ type: "manuscript" });
+    initWorkspace();
+    startPolling();
+    return () => stopPolling();
+  }, []); // eslint-disable-line
+
+  // Reset the center selection when the active story changes (data fetching for
+  // the new story is handled by the store's setActiveId).
+  useEffect(() => {
+    if (activeId) setSel({ type: "manuscript" });
   }, [activeId]);
 
   useEffect(() => {
@@ -216,17 +247,283 @@ export default function Studio() {
     setInput("");
   };
 
+  // Pull fresh workspace + arc into the shared store (used after edits, tool
+  // runs, and find/replace applies).
   const reload = () => {
-    fetch(`/api/workspace?version=${version}`)
-      .then((r) => r.json())
-      .then((d) => setStories(Array.isArray(d.stories) ? d.stories : []))
-      .catch(() => {});
-    if (activeId)
-      fetch(`/api/arc?story_id=${encodeURIComponent(activeId)}`)
-        .then((r) => r.json())
-        .then((d) => setArc(Array.isArray(d.characters) ? d.characters : []))
-        .catch(() => {});
+    void refreshStore();
   };
+
+  // Map the current selection to the markdown file behind it (or null when the
+  // view isn't a single editable document, e.g. the version-diff view).
+  const editableDoc = (): { path: string; content: string } | null => {
+    if (!story) return null;
+    if (sel.type === "manuscript")
+      return story.manuscriptPath
+        ? { path: story.manuscriptPath, content: story.manuscript || "" }
+        : null;
+    if (sel.type === "scene") {
+      const d = (story.drafts || []).find((x: any) => x.id === sel.id);
+      return d?.path ? { path: d.path, content: d.content || "" } : null;
+    }
+    if (sel.type === "character") {
+      const c = (story.characters || []).find((x: any) => x.name === sel.id);
+      return c?.path ? { path: c.path, content: c.description || "" } : null;
+    }
+    if (sel.type === "doc") {
+      if (sel.id === "architecture") {
+        const raw = story.architectureBrief || "";
+        // The API substitutes a placeholder when no brief exists yet; start the
+        // editor empty in that case rather than editing the placeholder text.
+        const content = /^No architecture brief/i.test(raw) ? "" : raw;
+        return story.architecturePath
+          ? { path: story.architecturePath, content }
+          : null;
+      }
+      if (sel.id === "worldbible")
+        return story.worldBiblePath
+          ? { path: story.worldBiblePath, content: story.worldBible || "" }
+          : null;
+      return story.executiveSummaryPath
+        ? {
+            path: story.executiveSummaryPath,
+            content: story.executiveSummary || "",
+          }
+        : null;
+    }
+    if (sel.type === "aspect") {
+      const r = (story.aspectReports || []).find(
+        (x: any) => x.aspect === sel.id,
+      );
+      return r?.path ? { path: r.path, content: r.content || "" } : null;
+    }
+    return null;
+  };
+
+  const startEdit = () => {
+    const doc = editableDoc();
+    if (!doc) return;
+    setEditText(doc.content);
+    setSaveMsg("");
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setSaveMsg("");
+  };
+
+  const saveEdit = async () => {
+    const doc = editableDoc();
+    if (!doc || saving) return;
+    setSaving(true);
+    setSaveMsg("");
+    try {
+      const res = await fetch("/api/document", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relPath: doc.path, content: editText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Save failed");
+      setEditing(false);
+      setSaveMsg("Saved ✓");
+      reload();
+    } catch (e: any) {
+      setSaveMsg(`Save failed: ${e?.message || e}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Leave edit mode whenever the selection / version / project changes, so the
+  // buffer is never left pointing at a document we've navigated away from.
+  useEffect(() => {
+    setEditing(false);
+    setSaveMsg("");
+  }, [sel, version, activeId]);
+
+  // Run a deterministic find/replace. apply=false previews; apply=true writes.
+  const runFindReplace = async (apply: boolean) => {
+    if (!frFind || frBusy) return;
+    setFrBusy(true);
+    try {
+      const doc = editableDoc();
+      const scopeArgs =
+        frScope === "document" && doc?.path
+          ? { relPath: doc.path }
+          : frScope === "story"
+            ? { storyId: activeId }
+            : {};
+      const res = await fetch("/api/find-replace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          find: frFind,
+          replace: frReplace,
+          mode: frMode,
+          caseSensitive: frCase,
+          version,
+          apply,
+          ...scopeArgs,
+        }),
+      });
+      const data = await res.json();
+      setFrResult(data);
+      setFrApplied(apply && !data.error);
+      if (apply && !data.error) reload();
+    } catch (e: any) {
+      setFrResult({ error: e?.message || String(e) });
+      setFrApplied(false);
+    } finally {
+      setFrBusy(false);
+    }
+  };
+
+  // ---------- chat history ----------
+  const firstUserText = (msgs: any[]): string => {
+    const u = (msgs || []).find((m) => m?.role === "user");
+    const t = u?.parts?.find((p: any) => p?.type === "text");
+    return (t?.text || "").replace(/^\(Active project:[^)]*\)\s*/i, "").trim();
+  };
+
+  const refreshConvos = async () => {
+    if (!activeId) return;
+    try {
+      const [a, ar] = await Promise.all([
+        fetch(`/api/chats?storyId=${encodeURIComponent(activeId)}`).then((r) =>
+          r.json(),
+        ),
+        fetch(
+          `/api/chats?storyId=${encodeURIComponent(activeId)}&archived=1`,
+        ).then((r) => r.json()),
+      ]);
+      setConvos(Array.isArray(a?.conversations) ? a.conversations : []);
+      setArchivedConvos(
+        Array.isArray(ar?.conversations) ? ar.conversations : [],
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const saveChat = async (msgs: any[]) => {
+    if (!activeId || !msgs?.length) return;
+    try {
+      const res = await fetch("/api/chats", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storyId: activeId,
+          id: chatId,
+          title: firstUserText(msgs) || undefined,
+          messages: msgs,
+        }),
+      });
+      const data = await res.json();
+      if (data?.id) setChatId(data.id);
+    } catch {
+      /* best effort */
+    }
+  };
+
+  const newChat = () => {
+    // Clearing to empty is guarded by the length check in the save effect, so
+    // we must NOT set the skip flag here — otherwise the first message of the
+    // new conversation would be swallowed instead of saved.
+    skipNextSave.current = false;
+    setMessages([]);
+    setChatId(null);
+    savedSig.current = "";
+    setHistoryOpen(false);
+  };
+
+  const loadChat = async (id: string) => {
+    if (!activeId) return;
+    try {
+      const data = await fetch(
+        `/api/chats?storyId=${encodeURIComponent(activeId)}&id=${encodeURIComponent(id)}`,
+      ).then((r) => r.json());
+      if (Array.isArray(data?.messages)) {
+        skipNextSave.current = true;
+        setMessages(data.messages);
+        setChatId(data.id || id);
+        savedSig.current = `${data.id || id}:${data.messages.length}`;
+      }
+    } catch {
+      /* ignore */
+    }
+    setHistoryOpen(false);
+  };
+
+  const chatAction = async (action: string, id: string) => {
+    if (!activeId) return;
+    if (
+      action === "delete" &&
+      !window.confirm("Delete this conversation permanently?")
+    )
+      return;
+    try {
+      await fetch("/api/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, storyId: activeId, id }),
+      });
+    } catch {
+      /* ignore */
+    }
+    if (id === chatId && (action === "delete" || action === "archive"))
+      newChat();
+    refreshConvos();
+  };
+
+  // Restore the most-recent conversation when the active story changes.
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetch(
+          `/api/chats?storyId=${encodeURIComponent(activeId)}`,
+        ).then((r) => r.json());
+        const list = Array.isArray(data?.conversations)
+          ? data.conversations
+          : [];
+        if (cancelled) return;
+        setConvos(list);
+        if (list.length > 0) {
+          await loadChat(list[0].id);
+        } else {
+          // No history for this story: start clean and allow the first message
+          // to save (empty state is already guarded in the save effect).
+          skipNextSave.current = false;
+          setMessages([]);
+          setChatId(null);
+          savedSig.current = "";
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]); // eslint-disable-line
+
+  // Auto-save the conversation once it settles, de-duplicated by signature.
+  useEffect(() => {
+    if (status !== "ready") return;
+    if (!activeId || messages.length === 0) return;
+    const last = messages[messages.length - 1] as any;
+    const sig = `${chatId}:${messages.length}:${last?.id || ""}`;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      savedSig.current = sig;
+      return;
+    }
+    if (sig === savedSig.current) return;
+    savedSig.current = sig;
+    saveChat(messages);
+  }, [status, messages]); // eslint-disable-line
 
   // Deterministic tool run (server-side, version-aware), then refresh the view.
   const runTool = async (label: string, tool: string, args: any) => {
@@ -265,8 +562,8 @@ export default function Studio() {
           ]
         : [
             { label: "+ New story", run: () => send(`Start a brand-new story with create_narrative — ask me for the logline, genre, tone, and length.`) },
-            { label: "📋 StoryScope audit", run: () => send(`Run storyscope_final_review on this project (async).`) },
-            { label: "✎ Apply Draft 2", run: () => send(`Run apply_storyscope_revisions on this project (async).`) },
+            { label: "📋 StoryScope audit", run: () => send(`Run storyscope_final_review on this project for version "${version}" (async).`) },
+            { label: "✎ Apply revisions", run: () => send(`Run apply_storyscope_revisions on this project (async), reading the review for source version "${version}".`) },
           ];
 
   // ---- center content ----
@@ -494,7 +791,7 @@ export default function Studio() {
             ))}
           </select>
         )}
-        <a href="/" style={{ marginLeft: "auto", color: C.dim, fontSize: "0.78rem" }}>
+        <a href="/classic" style={{ marginLeft: "auto", color: C.dim, fontSize: "0.78rem" }}>
           ← classic dashboard
         </a>
       </div>
@@ -544,42 +841,266 @@ export default function Studio() {
               {a.label}
             </button>
           ))}
-          <span style={{ marginLeft: "auto", color: C.dim, fontSize: "0.72rem", alignSelf: "center" }}>
-            {sel.type === "scene"
-              ? `scene · ${sel.id}`
-              : sel.type === "character"
-                ? `character · ${sel.id}`
-                : "project"}
-          </span>
+          <div
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            {!editing && (
+              <button
+                style={actionBtn}
+                onClick={() => {
+                  setFrResult(null);
+                  setFrApplied(false);
+                  setFrScope(editableDoc() ? "document" : "story");
+                  setFrOpen(true);
+                }}
+                title="Deterministic find & replace"
+              >
+                ⇎ Find/Replace
+              </button>
+            )}
+            {editableDoc() && !editing && (
+              <button style={actionBtn} onClick={startEdit} disabled={busy}>
+                ✏ Edit
+              </button>
+            )}
+            {editing && (
+              <>
+                <button style={sendBtn} onClick={saveEdit} disabled={saving}>
+                  {saving ? "…saving" : "💾 Save"}
+                </button>
+                <button style={actionBtn} onClick={cancelEdit} disabled={saving}>
+                  Cancel
+                </button>
+              </>
+            )}
+            {saveMsg && (
+              <span
+                style={{
+                  color: saveMsg.startsWith("Saved") ? "#7cd992" : "#e06c75",
+                  fontSize: "0.72rem",
+                }}
+              >
+                {saveMsg}
+              </span>
+            )}
+            <span style={{ color: C.dim, fontSize: "0.72rem" }}>
+              {sel.type === "scene"
+                ? `scene · ${sel.id}`
+                : sel.type === "character"
+                  ? `character · ${sel.id}`
+                  : "project"}
+            </span>
+          </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "32px 48px", fontSize: "1.02rem", color: C.text }}>
-          {center()}
+          {editing ? (
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              spellCheck
+              style={{
+                width: "100%",
+                height: "100%",
+                minHeight: "60vh",
+                resize: "none",
+                background: C.panel2,
+                color: C.text,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                padding: "16px 18px",
+                fontFamily: "ui-monospace, monospace",
+                fontSize: "0.92rem",
+                lineHeight: 1.6,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          ) : (
+            <>
+              {(sel.type === "doc" ||
+                sel.type === "aspect" ||
+                sel.type === "diff") && (
+                <button
+                  onClick={() => setSel({ type: "manuscript" })}
+                  style={{
+                    background: "transparent",
+                    color: C.accent,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    marginBottom: 18,
+                  }}
+                >
+                  ← Back to manuscript
+                </button>
+              )}
+              {center()}
+            </>
+          )}
         </div>
         {/* copilot rail */}
         <div style={rail}>
-          <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
-            {messages.length === 0 ? (
-              <div style={{ color: C.dim, fontSize: "0.8rem" }}>
-                Copilot — knows the active project. Try: “review the manuscript”, “run a StoryScope audit”, “continue drafting the next scene”.
-              </div>
-            ) : (
-              messages.map((m: any) => (
-                <div key={m.id} style={{ margin: "6px 0", fontSize: "0.84rem" }}>
-                  <b style={{ color: m.role === "user" ? C.accent : "#7cd992" }}>
-                    {m.role === "user" ? "you" : "copilot"}:
-                  </b>{" "}
-                  {m.parts?.map((p: any, i: number) =>
-                    p.type === "text" ? (
-                      <span key={i}>{p.text}</span>
-                    ) : p.type?.startsWith?.("tool-") ? (
-                      <span key={i} style={pill(C.accent)}>⚙ {p.type.slice(5)}</span>
-                    ) : null,
-                  )}
-                </div>
-              ))
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 12px",
+              borderBottom: `1px solid ${C.border}`,
+            }}
+          >
+            <span style={{ fontSize: "0.78rem", fontWeight: 600 }}>
+              Copilot
+            </span>
+            {chatId && (
+              <span style={{ color: C.dim, fontSize: "0.68rem" }}>· saved</span>
             )}
-            {busy && <div style={{ color: C.dim, fontSize: "0.8rem" }}>…working</div>}
+            <button
+              style={{ ...railBtn, marginLeft: "auto" }}
+              onClick={newChat}
+              title="Start a new conversation"
+            >
+              ＋ New
+            </button>
+            <button
+              style={railBtn}
+              onClick={() => {
+                const next = !historyOpen;
+                setHistoryOpen(next);
+                if (next) refreshConvos();
+              }}
+              title="Conversation history"
+            >
+              🕘 History
+            </button>
           </div>
+          {historyOpen ? (
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {(["active", "archived"] as const).map((t) => (
+                  <button
+                    key={t}
+                    style={{
+                      ...railBtn,
+                      background:
+                        historyTab === t ? C.accentSoft : "transparent",
+                      color: historyTab === t ? "#e9d5ff" : C.dim,
+                    }}
+                    onClick={() => setHistoryTab(t)}
+                  >
+                    {t === "active"
+                      ? `Active (${convos.length})`
+                      : `Archived (${archivedConvos.length})`}
+                  </button>
+                ))}
+              </div>
+              {(historyTab === "active" ? convos : archivedConvos).length ===
+              0 ? (
+                <div style={{ color: C.dim, fontSize: "0.76rem" }}>
+                  No {historyTab} conversations yet.
+                </div>
+              ) : (
+                (historyTab === "active" ? convos : archivedConvos).map(
+                  (c: any) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        marginBottom: 6,
+                        background: c.id === chatId ? C.accentSoft : C.panel2,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.8rem",
+                          marginBottom: 4,
+                          cursor: "pointer",
+                        }}
+                        onClick={() => loadChat(c.id)}
+                        title="Open this conversation"
+                      >
+                        {c.title || "Untitled"}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <span style={{ color: C.dim, fontSize: "0.66rem" }}>
+                          {c.messageCount || 0} msg
+                          {c.updatedAt
+                            ? ` · ${new Date(c.updatedAt).toLocaleString()}`
+                            : ""}
+                        </span>
+                        <button
+                          style={{ ...railBtn, marginLeft: "auto" }}
+                          onClick={() => loadChat(c.id)}
+                        >
+                          Open
+                        </button>
+                        {historyTab === "active" ? (
+                          <button
+                            style={railBtn}
+                            onClick={() => chatAction("archive", c.id)}
+                          >
+                            Archive
+                          </button>
+                        ) : (
+                          <button
+                            style={railBtn}
+                            onClick={() => chatAction("unarchive", c.id)}
+                          >
+                            Unarchive
+                          </button>
+                        )}
+                        <button
+                          style={{ ...railBtn, color: "#e06c75" }}
+                          onClick={() => chatAction("delete", c.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ),
+                )
+              )}
+            </div>
+          ) : (
+            <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
+              {messages.length === 0 ? (
+                <div style={{ color: C.dim, fontSize: "0.8rem" }}>
+                  Copilot — knows the active project. Try: “review the manuscript”, “run a StoryScope audit”, “continue drafting the next scene”.
+                </div>
+              ) : (
+                messages.map((m: any) => (
+                  <div key={m.id} style={{ margin: "6px 0", fontSize: "0.84rem" }}>
+                    <b style={{ color: m.role === "user" ? C.accent : "#7cd992" }}>
+                      {m.role === "user" ? "you" : "copilot"}:
+                    </b>{" "}
+                    {m.parts?.map((p: any, i: number) =>
+                      p.type === "text" ? (
+                        <span key={i}>{p.text}</span>
+                      ) : p.type?.startsWith?.("tool-") ? (
+                        <span key={i} style={pill(C.accent)}>⚙ {p.type.slice(5)}</span>
+                      ) : null,
+                    )}
+                  </div>
+                ))
+              )}
+              {busy && <div style={{ color: C.dim, fontSize: "0.8rem" }}>…working</div>}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, padding: "8px 12px", borderTop: `1px solid ${C.border}` }}>
             <input
               value={input}
@@ -602,6 +1123,240 @@ export default function Studio() {
         </div>
         {inspector()}
       </div>
+
+      {/* find / replace modal */}
+      {frOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: "8vh",
+            zIndex: 50,
+          }}
+          onClick={() => setFrOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 620,
+              maxWidth: "92vw",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: "18px 20px",
+              boxShadow: "0 18px 60px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: 14,
+              }}
+            >
+              <span style={{ fontWeight: 700, color: C.accent }}>
+                ⇎ Find &amp; Replace
+              </span>
+              <span
+                style={{ marginLeft: 10, color: C.dim, fontSize: "0.72rem" }}
+              >
+                deterministic · backs up every file it changes
+              </span>
+              <button
+                style={{
+                  marginLeft: "auto",
+                  background: "transparent",
+                  border: "none",
+                  color: C.dim,
+                  cursor: "pointer",
+                  fontSize: "1.1rem",
+                }}
+                onClick={() => setFrOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                value={frFind}
+                onChange={(e) => setFrFind(e.target.value)}
+                placeholder={frMode === "regex" ? "Find (regex)…" : "Find…"}
+                style={frInput}
+              />
+              <input
+                value={frReplace}
+                onChange={(e) => setFrReplace(e.target.value)}
+                placeholder="Replace with… (empty = delete the matches)"
+                style={frInput}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  fontSize: "0.8rem",
+                }}
+              >
+                <select
+                  value={frMode}
+                  onChange={(e) => setFrMode(e.target.value as any)}
+                  style={selectStyle}
+                >
+                  <option value="whole-word" style={{ background: C.panel }}>
+                    Whole word (safe for names)
+                  </option>
+                  <option value="literal" style={{ background: C.panel }}>
+                    Literal substring
+                  </option>
+                  <option value="regex" style={{ background: C.panel }}>
+                    Regex
+                  </option>
+                </select>
+
+                <select
+                  value={frScope}
+                  onChange={(e) => setFrScope(e.target.value as any)}
+                  style={selectStyle}
+                >
+                  <option
+                    value="document"
+                    disabled={!editableDoc()}
+                    style={{ background: C.panel }}
+                  >
+                    This document
+                  </option>
+                  <option value="story" style={{ background: C.panel }}>
+                    This story
+                  </option>
+                  <option value="all" style={{ background: C.panel }}>
+                    All stories
+                  </option>
+                </select>
+
+                <label
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "center",
+                    color: C.dim,
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={frCase}
+                    onChange={(e) => setFrCase(e.target.checked)}
+                  />
+                  Match case
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button
+                  style={actionBtn}
+                  onClick={() => runFindReplace(false)}
+                  disabled={frBusy || !frFind}
+                >
+                  {frBusy ? "…working" : "🔍 Preview"}
+                </button>
+                <button
+                  style={sendBtn}
+                  onClick={() => runFindReplace(true)}
+                  disabled={frBusy || !frFind || !frResult || frResult.error}
+                  title={
+                    !frResult
+                      ? "Preview first to see what will change"
+                      : "Apply the changes"
+                  }
+                >
+                  ✓ Apply
+                </button>
+              </div>
+
+              {/* results */}
+              {frResult && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    borderTop: `1px solid ${C.border}`,
+                    paddingTop: 10,
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {frResult.error ? (
+                    <div style={{ color: "#e06c75" }}>⚠ {frResult.error}</div>
+                  ) : (
+                    <>
+                      <div
+                        style={{
+                          color: frApplied ? "#7cd992" : C.text,
+                          marginBottom: 8,
+                        }}
+                      >
+                        {frApplied
+                          ? `✓ Applied ${frResult.totalReplacements} replacement(s) across ${frResult.filesAffected} file(s). Backups kept.`
+                          : `${frResult.totalMatches} match(es) in ${frResult.filesAffected} file(s) — nothing changed yet.`}
+                      </div>
+                      {(frResult.files || []).length === 0 ? (
+                        <div style={{ color: C.dim }}>No matches.</div>
+                      ) : (
+                        (frResult.files || [])
+                          .slice(0, 40)
+                          .map((f: any, i: number) => (
+                            <div key={i} style={{ marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  color: "rgba(255,255,255,0.7)",
+                                  fontFamily: "ui-monospace, monospace",
+                                  fontSize: "0.72rem",
+                                }}
+                              >
+                                {f.path} — {f.replacements}/{f.matches}
+                                {f.backup ? " · backed up" : ""}
+                              </div>
+                              {(f.samples || [])
+                                .slice(0, 2)
+                                .map((s: any, j: number) => (
+                                  <div
+                                    key={j}
+                                    style={{
+                                      fontSize: "0.72rem",
+                                      lineHeight: 1.4,
+                                      marginLeft: 8,
+                                    }}
+                                  >
+                                    <span style={{ color: C.dim }}>
+                                      L{s.line}:{" "}
+                                    </span>
+                                    <span style={{ color: "#f0c5c9" }}>
+                                      {s.before.trim().slice(0, 90)}
+                                    </span>
+                                    <span style={{ color: C.dim }}> → </span>
+                                    <span style={{ color: "#cdeccd" }}>
+                                      {s.after.trim().slice(0, 90)}
+                                    </span>
+                                  </div>
+                                ))}
+                            </div>
+                          ))
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -668,6 +1423,26 @@ const chatInput: any = {
   padding: "8px 10px",
   fontSize: "0.85rem",
   outline: "none",
+};
+const frInput: any = {
+  width: "100%",
+  background: C.bg,
+  color: C.text,
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  padding: "9px 11px",
+  fontSize: "0.88rem",
+  outline: "none",
+  boxSizing: "border-box",
+};
+const railBtn: any = {
+  background: "transparent",
+  color: C.dim,
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  padding: "3px 8px",
+  fontSize: "0.7rem",
+  cursor: "pointer",
 };
 const sendBtn: any = {
   background: C.accent,

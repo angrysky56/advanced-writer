@@ -10,6 +10,7 @@ interface Character {
   description: string;
   summary: string;
   panksepp: Record<string, number>;
+  path: string;
 }
 
 // Interface for parsed diagnostic
@@ -26,12 +27,14 @@ interface Draft {
   id: string;
   title: string;
   content: string;
+  path: string;
 }
 
 // Interface for StoryScope aspect report
 interface AspectReport {
   aspect: string;
   content: string;
+  path: string;
 }
 
 // Helper to get active workspace directory
@@ -161,11 +164,8 @@ function getCleanSummary(content: string): string {
   return "No summary description available.";
 }
 
-export async function GET(req?: Request) {
+async function getWorkspaceData(version: string = "v1") {
   try {
-    const version = req
-      ? new URL(req.url).searchParams.get("version") || "v1"
-      : "v1";
     const baseDir = getWorkspaceDir();
     if (!fs.existsSync(baseDir)) {
       return NextResponse.json({
@@ -217,6 +217,7 @@ export async function GET(req?: Request) {
             description: content,
             summary,
             panksepp,
+            path: path.join(dirName, "characters", file),
           });
         }
       }
@@ -319,15 +320,37 @@ export async function GET(req?: Request) {
           const title = id
             .replace(/_/g, " ")
             .replace(/\b\w/g, (c) => c.toUpperCase());
-          drafts.push({ id, title, content });
+          drafts.push({
+            id,
+            title,
+            content,
+            path: path.join(dirName, "drafts", version, file),
+          });
         }
       }
 
-      // 6. Read StoryScope reports
+      // 6. Read StoryScope reports for the requested version. Reviews are now
+      // scoped per draft version (storyscope-reports/<version>/); a legacy flat
+      // review (storyscope-reports/*.md) is treated as the v1 review.
       const aspectReports: AspectReport[] = [];
       let executiveSummary = "";
-      const reportsDir = path.join(storyPath, "storyscope-reports");
-      if (fs.existsSync(reportsDir)) {
+      const reportsRoot = path.join(storyPath, "storyscope-reports");
+      const versionedReportsDir = path.join(reportsRoot, version);
+      let reportsDir = "";
+      let reportsRel = path.join(dirName, "storyscope-reports", version);
+      if (fs.existsSync(versionedReportsDir)) {
+        reportsDir = versionedReportsDir;
+      } else if (
+        version === "v1" &&
+        fs.existsSync(reportsRoot) &&
+        (await fs.promises.readdir(reportsRoot)).some((f) => f.endsWith(".md"))
+      ) {
+        reportsDir = reportsRoot;
+        reportsRel = path.join(dirName, "storyscope-reports");
+      }
+      // Default path for a not-yet-created summary points at the versioned spot.
+      let executiveSummaryPath = path.join(reportsRel, "executive-summary.md");
+      if (reportsDir) {
         const reportFiles = await fs.promises.readdir(reportsDir);
         reportFiles.sort((a, b) =>
           a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
@@ -340,12 +363,17 @@ export async function GET(req?: Request) {
           );
           if (file === "executive-summary.md") {
             executiveSummary = content;
+            executiveSummaryPath = path.join(reportsRel, file);
           } else {
             const aspect = file
               .replace(".md", "")
               .replace(/_/g, " ")
               .replace(/\b\w/g, (c) => c.toUpperCase());
-            aspectReports.push({ aspect, content });
+            aspectReports.push({
+              aspect,
+              content,
+              path: path.join(reportsRel, file),
+            });
           }
         }
       }
@@ -375,6 +403,20 @@ export async function GET(req?: Request) {
         aspectReports,
         executiveSummary,
         manuscript,
+        // Relative file paths (under the workspace base dir) for hand editing.
+        architecturePath: path.join(
+          dirName,
+          "structure",
+          "story-architecture-brief.md",
+        ),
+        worldBiblePath: path.join(dirName, "structure", "world-bible.md"),
+        executiveSummaryPath,
+        manuscriptPath: path.join(
+          dirName,
+          "manuscript",
+          version,
+          "final_manuscript.md",
+        ),
       });
     }
 
@@ -385,6 +427,11 @@ export async function GET(req?: Request) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+export async function GET(req: Request) {
+  const version = new URL(req.url).searchParams.get("version") || "v1";
+  return getWorkspaceData(version);
 }
 
 export async function POST(req: Request) {
@@ -405,7 +452,7 @@ export async function POST(req: Request) {
         await fs.promises.mkdir(path.join(newProjectPath, "drafts", "v1"), { recursive: true });
         await fs.promises.mkdir(path.join(newProjectPath, "diagnostics"), { recursive: true });
       }
-      return GET();
+      return getWorkspaceData("v1");
     }
 
     if (!newPath) {
@@ -426,7 +473,7 @@ export async function POST(req: Request) {
     process.env.WORKSPACE_DIR = resolvedPath;
 
     // Return the workspace state for the new path
-    return GET();
+    return getWorkspaceData("v1");
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

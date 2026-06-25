@@ -20,6 +20,11 @@ export const storyscopeFinalReviewDef = {
         description:
           "The story to review. Must have a compiled final_manuscript.md.",
       },
+      version: {
+        type: "string",
+        description:
+          "Which draft version to review (e.g. 'v2'). Defaults to the latest draft. The review is saved under this version and never overwrites another version's review.",
+      },
       async: {
         type: "boolean",
         description:
@@ -35,13 +40,28 @@ export async function executeStoryscopeFinalReview(args: any) {
   const { story_id } = args;
 
   try {
-    const manuscript = await workspaceExporter.readManuscript(story_id);
+    // Review the requested version's manuscript — or the latest draft by
+    // default. The review is then stored under THIS version so it is linked to
+    // the draft it actually critiques and never clobbers another version's.
+    const versions = await workspaceExporter.listDraftVersions(story_id);
+    const latestNum = versions.length
+      ? Math.max(
+          ...versions.map((v) => parseInt(v.replace(/\D/g, ""), 10) || 1),
+        )
+      : 1;
+    const version =
+      args.version || (versions.length ? `v${latestNum}` : "v1");
+
+    const manuscript = await workspaceExporter.readManuscript(
+      story_id,
+      version,
+    );
     if (!manuscript) {
       return {
         content: [
           {
             type: "text",
-            text: `Error: No compiled manuscript found for story: ${story_id}. Please expand to novel or fast-auto complete first.`,
+            text: `Error: No compiled manuscript found for story '${story_id}' version '${version}'. Please expand to novel or fast-auto complete first (or pass a version that has a compiled manuscript).`,
           },
         ],
         isError: true,
@@ -133,6 +153,7 @@ ${manuscript}`,
         story_id,
         aspectName,
         report,
+        version,
       );
       reports.push({ aspect: aspectName, report });
       return report;
@@ -184,13 +205,14 @@ Never recommend rewriting good prose merely to conform to an earlier outline. Fo
     await workspaceExporter.saveStoryscopeExecutiveSummary(
       story_id,
       executiveSummary,
+      version,
     );
 
     return {
       content: [
         {
           type: "text",
-          text: `StoryScope Final Review Complete! Generated ${reports.length} of ${aspectFiles.length} aspect reports${failedCount > 0 ? ` (${failedCount} lens(es) failed and were skipped)` : ""} and 1 Executive Summary. Saved to workspace under ${story_id}/storyscope-reports.`,
+          text: `StoryScope Final Review Complete for ${version}! Generated ${reports.length} of ${aspectFiles.length} aspect reports${failedCount > 0 ? ` (${failedCount} lens(es) failed and were skipped)` : ""} and 1 Executive Summary. Saved to workspace under ${story_id}/storyscope-reports/${version}.`,
         },
       ],
     };

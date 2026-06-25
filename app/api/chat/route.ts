@@ -372,10 +372,16 @@ export async function POST(req: Request) {
 
       storyscope_final_review: tool({
         description:
-          "Runs the multi-agent StoryScope review on a finished manuscript, dispatching parallel lenses and synthesizing an Executive Summary.",
+          "Runs the multi-agent StoryScope review on a finished manuscript, dispatching parallel lenses and synthesizing an Executive Summary. The review is saved per draft version and never overwrites another version's review.",
         inputSchema: zodSchema(
           z.object({
             story_id: z.string().describe("Identifier for the story to review"),
+            version: z
+              .string()
+              .optional()
+              .describe(
+                "Draft version to review (e.g. 'v2'). Defaults to the latest draft.",
+              ),
           }),
         ),
         execute: async (args) => {

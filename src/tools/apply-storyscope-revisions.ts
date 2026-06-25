@@ -48,12 +48,18 @@ export async function executeApplyStoryscopeRevisions(args: any) {
       args.source_version || (versions.length ? `v${latestNum}` : "v1");
     const target_version = args.target_version || `v${latestNum + 1}`;
 
-    // 1. Read Executive Summary AND the full specialist lens reports — the
-    // reviser must work from the specific critique, not just the lossy summary.
+    // 1. Read Executive Summary AND the full specialist lens reports for the
+    // SOURCE version — the reviser must work from the critique of the exact
+    // draft it is revising, not whatever review happened to be written last.
     const executiveSummary =
-      await workspaceExporter.readStoryscopeExecutiveSummary(story_id);
-    const lensReports =
-      await workspaceExporter.readAllStoryscopeReports(story_id);
+      await workspaceExporter.readStoryscopeExecutiveSummary(
+        story_id,
+        source_version,
+      );
+    const lensReports = await workspaceExporter.readAllStoryscopeReports(
+      story_id,
+      source_version,
+    );
     const lensContext =
       lensReports.length > 0
         ? lensReports
