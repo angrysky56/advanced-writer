@@ -158,6 +158,7 @@ export default function Studio() {
   const refreshStore = useWorkspace((s) => s.refresh);
   const startPolling = useWorkspace((s) => s.startPolling);
   const stopPolling = useWorkspace((s) => s.stopPolling);
+  const jobs = useWorkspace((s) => s.jobs);
 
   const [sel, setSel] = useState<Selection>({ type: "manuscript" });
   const [input, setInput] = useState("");
@@ -197,6 +198,7 @@ export default function Studio() {
   const [archivedConvos, setArchivedConvos] = useState<any[]>([]);
   const savedSig = useRef<string>("");
   const skipNextSave = useRef<boolean>(false);
+  const prevStatus = useRef<string>("");
 
   // Boot the shared store and start the job poller (which auto-refreshes every
   // view when a background job finishes). Reference-counted; stops on unmount.
@@ -523,6 +525,25 @@ export default function Studio() {
     if (sig === savedSig.current) return;
     savedSig.current = sig;
     saveChat(messages);
+  }, [status, messages]); // eslint-disable-line
+
+  // When the copilot finishes a turn that used any tool, work likely changed on
+  // disk (new draft, StoryScope review, character, revision). The chat tools run
+  // synchronously and don't register a background job, so the job-poller can't
+  // catch them — refresh the shared store here so the UI reflects it without a
+  // manual reload or version switch.
+  useEffect(() => {
+    const was = prevStatus.current;
+    prevStatus.current = status;
+    if ((was === "streaming" || was === "submitted") && status === "ready") {
+      const lastAssistant = [...messages]
+        .reverse()
+        .find((m: any) => m.role === "assistant");
+      const usedTool = lastAssistant?.parts?.some(
+        (p: any) => typeof p?.type === "string" && p.type.startsWith("tool-"),
+      );
+      if (usedTool) void refreshStore();
+    }
   }, [status, messages]); // eslint-disable-line
 
   // Deterministic tool run (server-side, version-aware), then refresh the view.
@@ -981,6 +1002,56 @@ export default function Studio() {
               🕘 History
             </button>
           </div>
+          {(() => {
+            const running = (jobs || []).filter(
+              (j: any) => j.status === "running",
+            );
+            const latest = (jobs || [])[0];
+            const recentlyDone =
+              latest &&
+              latest.status !== "running" &&
+              latest.finishedAt &&
+              Date.now() - new Date(latest.finishedAt).getTime() < 60000;
+            if (running.length === 0 && !recentlyDone) return null;
+            return (
+              <div
+                style={{
+                  padding: "6px 12px",
+                  borderBottom: `1px solid ${C.border}`,
+                  background: C.panel2,
+                  fontSize: "0.72rem",
+                }}
+              >
+                {running.map((j: any) => (
+                  <div
+                    key={j.id}
+                    style={{
+                      color: "#e9d5ff",
+                      display: "flex",
+                      gap: 6,
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ color: C.accent }}>⚙</span>{" "}
+                    {String(j.tool).replace(/_/g, " ")} — running…
+                  </div>
+                ))}
+                {running.length === 0 && recentlyDone && (
+                  <div
+                    style={{
+                      color: latest.status === "failed" ? "#e06c75" : "#7cd992",
+                    }}
+                  >
+                    {latest.status === "failed" ? "✗" : "✓"}{" "}
+                    {String(latest.tool).replace(/_/g, " ")}{" "}
+                    {latest.status === "failed"
+                      ? "failed"
+                      : "finished — check the draft-version selector"}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {historyOpen ? (
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>

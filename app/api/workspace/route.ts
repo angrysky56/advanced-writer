@@ -181,6 +181,9 @@ async function getWorkspaceData(version: string = "v1") {
     const stories = [];
 
     for (const dirName of dirs) {
+      // Skip system/internal folders (e.g. _jobs from the background job runner,
+      // dot-dirs) so they never surface as bogus "stories".
+      if (dirName.startsWith("_") || dirName.startsWith(".")) continue;
       const storyPath = path.join(baseDir, dirName);
       const stats = await fs.promises.stat(storyPath);
       if (!stats.isDirectory()) continue;

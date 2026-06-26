@@ -24,6 +24,25 @@ import { executeApplyStoryscopeRevisions } from "../../../src/tools/apply-storys
 import { executeWebSearch } from "../../../src/tools/web-search";
 import { workspaceExporter } from "../../../src/storage/workspace";
 import { aiRouter } from "../../../src/ai/router";
+import { startJob } from "../../../src/jobs";
+
+/**
+ * Wrap a long, draft-mutating tool so the chat STARTS it as a background job and
+ * returns immediately. Multi-minute runs must never hold the chat stream open:
+ * the work completes server-side, but the held stream gets truncated and the
+ * copilot's final message is lost ("no response, but a new draft appeared").
+ * The Studio's job poller refreshes the UI when the job lands.
+ */
+function runAsJob(
+  tool: string,
+  exec: (args: any) => Promise<any>,
+  describe: string,
+) {
+  return async (args: any) => {
+    const rec = startJob(tool, args, () => exec(args));
+    return `Started ${describe} as background job ${rec.id}. It runs in the background and the Studio refreshes automatically when it finishes — tell the user it's running and to watch the draft-version selector for the new version. Do NOT wait or claim it is already done.`;
+  };
+}
 
 // No time cap: novel-length runs can take an hour or more. This system is
 // designed to run long; do NOT reintroduce a maxDuration cap. (Self-hosted
@@ -153,10 +172,11 @@ export async function POST(req: Request) {
               .describe("Identifier for the story to save under"),
           }),
         ),
-        execute: async (args) => {
-          const res = await executeCreateNarrative(args);
-          return res.content[0].text;
-        },
+        execute: runAsJob(
+          "create_narrative",
+          executeCreateNarrative,
+          "the new narrative build",
+        ),
       }),
 
       develop_character: tool({
@@ -297,10 +317,11 @@ export async function POST(req: Request) {
               .describe("The draft version to use"),
           }),
         ),
-        execute: async (args) => {
-          const res = await executeContinueNarrative(args);
-          return res.content[0].text;
-        },
+        execute: runAsJob(
+          "continue_narrative",
+          executeContinueNarrative,
+          "the next scene draft",
+        ),
       }),
 
       batch_revise_pathologies: tool({
@@ -321,10 +342,11 @@ export async function POST(req: Request) {
               .describe("The format to recompile the final manuscript into"),
           }),
         ),
-        execute: async (args) => {
-          const res = await executeBatchRevisePathologies(args);
-          return res.content[0].text;
-        },
+        execute: runAsJob(
+          "batch_revise_pathologies",
+          executeBatchRevisePathologies,
+          "the Character Writer's Room batch revision",
+        ),
       }),
 
       build_world_bible: tool({
@@ -364,10 +386,11 @@ export async function POST(req: Request) {
               .describe("The draft version to write to"),
           }),
         ),
-        execute: async (args) => {
-          const res = await executeExpandToNovel(args);
-          return res.content[0].text;
-        },
+        execute: runAsJob(
+          "expand_to_novel",
+          executeExpandToNovel,
+          "the novel expansion / auto-draft",
+        ),
       }),
 
       storyscope_final_review: tool({
@@ -398,10 +421,11 @@ export async function POST(req: Request) {
             story_id: z.string().describe("Identifier for the story"),
           }),
         ),
-        execute: async (args) => {
-          const res = await executeApplyStoryscopeRevisions(args);
-          return res.content[0].text;
-        },
+        execute: runAsJob(
+          "apply_storyscope_revisions",
+          executeApplyStoryscopeRevisions,
+          "the StoryScope revision (new draft version)",
+        ),
       }),
 
       web_search: tool({
@@ -443,5 +467,14 @@ export async function POST(req: Request) {
   // useChat expects the UI message stream protocol (text + reasoning + tool
   // parts), which the frontend renders via m.parts. A plain text stream here is
   // silently unparseable by useChat — the original "send, no response, no error".
-  return result.toUIMessageStreamResponse();
+  // Surface the real error instead of the default "An error occurred." mask, so
+  // a failed turn is visible rather than appearing as an empty response.
+  return result.toUIMessageStreamResponse({
+    onError: (error) => {
+      const msg =
+        error instanceof Error ? error.message : String(error ?? "Unknown error");
+      console.error("[chat] stream error:", msg);
+      return `⚠ Copilot error: ${msg}`;
+    },
+  });
 }
