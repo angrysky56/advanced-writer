@@ -37,6 +37,7 @@ import {
   executeApplyStoryscopeRevisions,
 } from "./apply-storyscope-revisions.js";
 import { findReplaceDef, executeFindReplace } from "./find-replace.js";
+import { brainstormDef, executeBrainstorm } from "./brainstorm.js";
 import { startJob, getJob, listJobs } from "../jobs.js";
 
 export const checkJobDef = {
@@ -75,6 +76,7 @@ export const ALL_TOOLS = [
   storyscopeFinalReviewDef,
   applyStoryscopeRevisionsDef,
   findReplaceDef,
+  brainstormDef,
   checkJobDef,
   listJobsDef,
 ];
@@ -158,6 +160,8 @@ async function dispatch(name: string, args: any) {
       return executeApplyStoryscopeRevisions(args);
     case "find_replace":
       return executeFindReplace(args);
+    case "brainstorm_ideas":
+      return executeBrainstorm(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

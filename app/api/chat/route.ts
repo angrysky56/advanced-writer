@@ -22,6 +22,7 @@ import { executeExpandToNovel } from "../../../src/tools/expand-to-novel";
 import { executeStoryscopeFinalReview } from "../../../src/tools/storyscope-review";
 import { executeApplyStoryscopeRevisions } from "../../../src/tools/apply-storyscope-revisions";
 import { executeWebSearch } from "../../../src/tools/web-search";
+import { executeBrainstorm } from "../../../src/tools/brainstorm";
 import { workspaceExporter } from "../../../src/storage/workspace";
 import { aiRouter } from "../../../src/ai/router";
 import { startJob } from "../../../src/jobs";
@@ -438,6 +439,37 @@ export async function POST(req: Request) {
         ),
         execute: async (args) => {
           const res = await executeWebSearch(args);
+          return res.content[0].text;
+        },
+      }),
+
+      brainstorm_ideas: tool({
+        description:
+          "Generate a batch of genuinely good, distinct story concepts (logline + genre + tone + hook) for brainstorming — premises with a real emotional core and a fresh angle, the kind that could become a beloved or cult-classic novel, never gimmicks or absurdist mashups. Use for fresh ideas, riffs on a seed, or 'more like that'. Discussion only — this never starts writing a story.",
+        inputSchema: zodSchema(
+          z.object({
+            seed: z
+              .string()
+              .optional()
+              .describe("Optional theme/genre/keywords/vibe to steer around."),
+            wildness: z
+              .number()
+              .optional()
+              .describe(
+                "Ambition: 0 grounded literary realism … 100 visionary/speculative. Scales reach, not absurdity. Default 40.",
+              ),
+            count: z
+              .number()
+              .optional()
+              .describe("How many concepts (1–8). Default 4."),
+            avoid: z
+              .array(z.string())
+              .optional()
+              .describe("Loglines to avoid repeating (for 'give me more')."),
+          }),
+        ),
+        execute: async (args) => {
+          const res = await executeBrainstorm(args);
           return res.content[0].text;
         },
       }),

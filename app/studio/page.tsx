@@ -202,8 +202,16 @@ export default function Studio() {
 
   // Boot the shared store and start the job poller (which auto-refreshes every
   // view when a background job finishes). Reference-counted; stops on unmount.
+  // Honors a ?story=<id> deep-link (e.g. opened from the Brainstorm project list).
   useEffect(() => {
-    initWorkspace();
+    initWorkspace().then(() => {
+      try {
+        const want = new URLSearchParams(window.location.search).get("story");
+        if (want) useWorkspace.getState().setActiveId(want);
+      } catch {
+        /* ignore */
+      }
+    });
     startPolling();
     return () => stopPolling();
   }, []); // eslint-disable-line
@@ -813,7 +821,7 @@ export default function Studio() {
           </select>
         )}
         <a href="/classic" style={{ marginLeft: "auto", color: C.dim, fontSize: "0.78rem" }}>
-          ← classic dashboard
+          ✦ Brainstorm
         </a>
       </div>
 
