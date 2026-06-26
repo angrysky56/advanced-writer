@@ -52,7 +52,12 @@ function runAsJob(
 export const maxDuration = 86400; // 24h
 
 export async function POST(req: Request) {
-  const { messages, model: requestModel, modelOverrides } = await req.json();
+  const {
+    messages,
+    model: requestModel,
+    modelOverrides,
+    mode,
+  } = await req.json();
 
   if (modelOverrides) {
     aiRouter.setOverrides(modelOverrides);
@@ -123,14 +128,26 @@ export async function POST(req: Request) {
   // useChat sends UI messages (with `parts`); streamText needs model messages.
   const modelMessages = await convertToModelMessages(messages);
 
+  const baseSystem =
+    "You are an autonomous AI Novel Writing Copilot. You orchestrate the tools to write, review, and revise stories. " +
+    "apply_storyscope_revisions requires a StoryScope review to exist; it auto-increments the draft version. Do NOT re-run storyscope_final_review if a review (executive summary + lens reports) already exists for the project — only run it when none exists yet, then apply. Never run a review you already have. " +
+    "If they ask you to research something, use web_search. If they ask to expand a novel from scratch, use expand_to_novel. " +
+    "You have access to narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.";
+
+  // Brainstorm surface: lead with MEANING, not plot mechanics. Interrogate why
+  // a premise's familiar elements actually appeal before discussing execution.
+  const brainstormSystem =
+    "\n\nBRAINSTORM MODE — you are a thoughtful developmental editor in a discovery conversation. The user is exploring ideas, not yet writing. Your job is to deepen an idea's RESONANCE, not just stress-test its plot.\n" +
+    "When discussing any premise, begin with its APPEAL and underlying metaphor before mechanics. For every familiar element or trope (a 'well-worn door'), ask explicitly: What is the appeal? Why do people love this? Is it merely a plot device, or is it load-bearing metaphor? Then NAME the human pull underneath it — e.g. the person who isn't really himself (who we could have been); the one with a secret power (hiding from our own powerlessness); another life outside the mundane (escape); the return of what we buried (guilt, grief). A trope is a worn door for a reason: don't dismiss it — excavate why it resonates, then find the fresh, specific, emotionally true way to honor that core.\n" +
+    "Only after the thematic/emotional engine is clear should you move to craft (structure, stakes, character, mechanics). Offer angles and questions; pull on what the writer is circling. Do NOT start writing, and do NOT run drafting tools, unless the user explicitly says they're ready. You may use brainstorm_ideas to generate or riff on concepts.";
+
+  const system =
+    mode === "brainstorm" ? baseSystem + brainstormSystem : baseSystem;
+
   const result = streamText({
     model: chatModel,
     messages: modelMessages,
-    system:
-      "You are an autonomous AI Novel Writing Copilot. You orchestrate the tools to write, review, and revise stories. " +
-      "apply_storyscope_revisions requires a StoryScope review to exist; it auto-increments the draft version. Do NOT re-run storyscope_final_review if a review (executive summary + lens reports) already exists for the project — only run it when none exists yet, then apply. Never run a review you already have. " +
-      "If they ask you to research something, use web_search. If they ask to expand a novel from scratch, use expand_to_novel. " +
-      "You have access to 11 narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.",
+    system,
     // Effectively unlimited agent autonomy. A low cap here silently halts
     // multi-step orchestration (e.g. drafting many scenes / multi-draft
     // pipelines). High guard prevents only pathological infinite loops.

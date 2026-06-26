@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { useWorkspace } from "../store/workspaceStore";
 
 /* ------------------------------------------------------------------ *
@@ -45,7 +46,14 @@ export default function Brainstorm() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
 
-  const { messages, sendMessage, status } = useChat();
+  // Tag this surface so the chat API applies the brainstorm system framing
+  // (lead with appeal/metaphor before plot; don't start writing unprompted).
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: { mode: "brainstorm" },
+    }),
+  });
   const busy = status === "submitted" || status === "streaming";
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -134,7 +142,7 @@ export default function Brainstorm() {
 
   const discuss = (idea: Idea) =>
     send(
-      `Let's explore this story idea:\n"${idea.logline}" (${[idea.genre, idea.tone].filter(Boolean).join(", ")})${idea.hook ? `\nHook: ${idea.hook}` : ""}\n\nWhat's strong, what's weak, and where could it go? Don't start writing yet — let's just talk it through.`,
+      `Let's explore this story idea (don't write yet — just talk it through):\n"${idea.logline}" (${[idea.genre, idea.tone].filter(Boolean).join(", ")})${idea.hook ? `\nHook: ${idea.hook}` : ""}\n\nStart with the real appeal: why does this premise pull at us, and is the familiar part just a device or a deeper metaphor? Then where could it go?`,
     );
 
   const sendToWriting = (idea: Idea) =>
