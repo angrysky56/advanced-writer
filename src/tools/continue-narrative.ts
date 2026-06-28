@@ -2,6 +2,7 @@ import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
+import { storySlug } from "../storage/story-id.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 import { loadCraftDirectives, NAMING_RULE } from "../ai/craft.js";
 import { recordSceneTracking, buildScratchpadContext } from "./_tracking.js";
@@ -51,13 +52,14 @@ export const continueNarrativeDef = {
 
 export async function executeContinueNarrative(args: any) {
   const {
-    story_id,
     previous_scene_id,
     next_scene_id,
     user_direction = "",
     version = "v1",
     beat_order,
   } = args;
+  // Canonical identity so scene nodes/files land under the same story key.
+  const story_id = storySlug(args.story_id);
 
   try {
     const architecture =

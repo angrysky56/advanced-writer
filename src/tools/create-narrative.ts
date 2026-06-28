@@ -3,6 +3,7 @@ import { workspaceExporter } from "../storage/workspace.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
 import { generateAndSeedCast } from "./_cast.js";
+import { storySlug } from "../storage/story-id.js";
 import { recordSceneTracking } from "./_tracking.js";
 import { executeBuildWorldBible } from "./build-world-bible.js";
 import {
@@ -109,8 +110,11 @@ export async function executeCreateNarrative(args: any) {
 
   try {
     // "create" must always make a NEW story folder, never write into an existing
-    // one (that's continue_narrative's job). Uniquify the name on collision.
-    const storyName = await workspaceExporter.uniqueStoryName(desiredName);
+    // one (that's continue_narrative's job). Uniquify the name on collision, then
+    // canonicalize to the slug so the graph key and folder agree from the start.
+    const storyName = storySlug(
+      await workspaceExporter.uniqueStoryName(desiredName),
+    );
 
     // 1. Cast FIRST, so character names are canonical and everything downstream
     // (architecture, scene drafting) references the same actors — fixing the

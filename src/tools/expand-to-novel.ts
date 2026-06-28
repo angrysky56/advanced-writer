@@ -9,6 +9,7 @@ import {
   checkWorldModelConsistency,
   formatBeatDirective,
 } from "./_arc.js";
+import { storySlug } from "../storage/story-id.js";
 
 export const expandToNovelDef = {
   name: "expand_to_novel",
@@ -51,19 +52,33 @@ export const expandToNovelDef = {
 
 export async function executeExpandToNovel(args: any) {
   const {
-    story_id,
     synopsis,
     target_length,
     auto_draft = false,
     version = "v1",
   } = args;
+  // Canonicalize the identity so "The Last Frequency", "the-last-frequency" and
+  // "the_last_frequency" all resolve to ONE story — the graph key and the
+  // workspace folder must agree, or the reuse guards below miss and regenerate.
+  const story_id = storySlug(args.story_id);
 
   try {
     // 1. CAST first — the arc and world bible are built AROUND it. Reuse the
     // existing cast if the story already has one; otherwise seed from the
     // synopsis (the author's full idea, not a one-liner).
     let cast = await neo4jStorage.getCharactersForStory(story_id);
+    // Fallback: if the graph read is empty (e.g. a transient Neo4j error, which
+    // getCharactersForStory swallows into []), do NOT blindly regenerate — first
+    // check whether the story already has character files on disk. Regenerating
+    // over an existing cast is what produced the duplicate/split-canon casts.
     if (!cast || cast.length === 0) {
+      const existingNames =
+        await workspaceExporter.listCharacterNames(story_id);
+      if (existingNames && existingNames.length > 0) {
+        throw new Error(
+          `Story "${story_id}" already has ${existingNames.length} character profile(s) on disk but none were returned from the graph — refusing to regenerate the cast and risk split canon. Check the Neo4j connection / story_ids, then retry. Existing cast: ${existingNames.join(", ")}.`,
+        );
+      }
       await generateAndSeedCast(story_id, synopsis);
       cast = await neo4jStorage.getCharactersForStory(story_id);
     }

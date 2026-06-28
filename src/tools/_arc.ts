@@ -3,6 +3,7 @@ import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { safeParseJson } from "../ai/extract.js";
+import { storySlug } from "../storage/story-id.js";
 
 export interface Beat {
   order: number;
@@ -110,6 +111,7 @@ export async function generateAndSeedArc(
   worldBible: string,
   targetLength: string,
 ): Promise<Beat[]> {
+  storyName = storySlug(storyName);
   const guidance = BEAT_GUIDANCE[targetLength] || "as many beats as the story needs";
   const prompt = `You are a master story architect. Build the ARC of this story as an ordered list of beats — the spine the writer will follow scene by scene. Honor the author's idea, the established cast, and the world. Give the story a real shape (setup, escalation, turn, climax, resolution appropriate to its form). Scale to roughly ${guidance}, but serve the story, not the number.
 
@@ -169,6 +171,7 @@ export async function checkWorldModelConsistency(
   worldBible: string,
   beats: Beat[],
 ): Promise<{ consistent: boolean; beats: Beat[]; report: string }> {
+  storyName = storySlug(storyName);
   const arcText = beats
     .map(
       (b) =>

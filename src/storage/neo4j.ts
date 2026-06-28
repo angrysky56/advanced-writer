@@ -1,6 +1,7 @@
 import neo4j, { Driver } from "neo4j-driver";
 import { ENV } from "../config.js";
 import { CharacterRecord, StoryRecord, SceneRecord } from "./types.js";
+import { storySlug } from "./story-id.js";
 
 export class Neo4jStorage {
   private driver: Driver;
@@ -47,7 +48,8 @@ export class Neo4jStorage {
           shadow: character.metadata.shadow,
           individuation_state: character.metadata.individuation_state,
           panksepp_primary: character.metadata.panksepp_primary,
-          story_ids: character.metadata.story_ids || [],
+          // Canonicalize so the graph key always matches the workspace folder.
+          story_ids: (character.metadata.story_ids || []).map(storySlug),
           current_state: "Initial state.",
         },
       );
@@ -67,6 +69,7 @@ export class Neo4jStorage {
     role: string,
     description: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const id = `${storyId}_${name.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`;
@@ -116,6 +119,7 @@ export class Neo4jStorage {
   }
 
   async getStoryState(storyId: string): Promise<any> {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const charsResult = await session.run(
@@ -180,6 +184,7 @@ export class Neo4jStorage {
   }
 
   async getCharactersForStory(storyId: string): Promise<any[]> {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const result = await session.run(
@@ -204,6 +209,7 @@ export class Neo4jStorage {
     characterName: string,
     stateUpdate: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       // Keep a bounded rolling arc log (last 8 beats) and rebuild current_state
@@ -250,6 +256,7 @@ export class Neo4jStorage {
     panksepp: Record<string, number>,
     plutchik: Record<string, number>,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const snapshot = JSON.stringify({
@@ -286,6 +293,7 @@ export class Neo4jStorage {
     characterName: string,
     scratchpadJson: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       await session.run(
@@ -317,6 +325,7 @@ export class Neo4jStorage {
     type: string,
     description: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const id = `${storyId}_entity_${entityName.replace(/\s+/g, "_").toLowerCase()}`;
@@ -344,6 +353,7 @@ export class Neo4jStorage {
     objectName: string,
     relation: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       // Find nodes by name and storyId. relation cannot be parameterized as a label directly in cypher.
@@ -383,6 +393,7 @@ export class Neo4jStorage {
       location?: string;
     },
   ): Promise<string> {
+    storyId = storySlug(storyId);
     const id = `${storyId}_beat_${beat.order}`;
     const session = this.getSession();
     try {
@@ -433,6 +444,7 @@ export class Neo4jStorage {
     characterName: string,
     storyId: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       await session.run(
@@ -459,6 +471,7 @@ export class Neo4jStorage {
     locationName: string,
     storyId: string,
   ) {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const locId = `${storyId}_entity_${locationName.replace(/\s+/g, "_").toLowerCase()}`;
@@ -480,6 +493,7 @@ export class Neo4jStorage {
 
   /** The full ordered arc (lean projection) for planning/checks. */
   async getArc(storyId: string): Promise<any[]> {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const res = await session.run(
@@ -511,6 +525,7 @@ export class Neo4jStorage {
    * loop loads before writing the scene, instead of dumping the whole graph.
    */
   async getBeatContext(storyId: string, order: number): Promise<any | null> {
+    storyId = storySlug(storyId);
     const session = this.getSession();
     try {
       const res = await session.run(

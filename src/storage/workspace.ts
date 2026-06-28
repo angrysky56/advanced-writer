@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { ENV } from "../config.js";
+import { storySlug } from "./story-id.js";
 
 export class WorkspaceExporter {
   get baseDir(): string {
@@ -13,8 +14,11 @@ export class WorkspaceExporter {
     }
   }
 
+  // Story folders and Neo4j story_ids MUST normalize identically, so this
+  // delegates to the shared canonical slug. (Kept as a method for the existing
+  // call sites that also slug per-file character names.)
   private sanitizeFilename(name: string): string {
-    return name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+    return storySlug(name);
   }
 
   /**

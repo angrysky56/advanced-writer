@@ -1,6 +1,7 @@
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
+import { storySlug } from "../storage/story-id.js";
 import {
   extractCharacterMeta,
   formatAffectProfile,
@@ -47,6 +48,10 @@ export async function generateAndSeedCast(
   // story the author actually described.
   storyIdea: string,
 ): Promise<SeededCharacter[]> {
+  // Canonicalize the story identity up front so the graph node ids and
+  // story_ids match the workspace folder regardless of how the caller
+  // formatted the name ("The Last Frequency" vs "the_last_frequency").
+  storyName = storySlug(storyName);
   const logline = storyIdea;
   // 1. PLAN the COMPLETE roster up front. Count scales entirely to the story —
   // a two-hander returns two; an epic returns hundreds. There is NO cap and NO
