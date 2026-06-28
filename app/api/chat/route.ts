@@ -8,6 +8,8 @@ import {
   convertToModelMessages,
 } from "ai";
 import { z } from "zod";
+import fs from "node:fs";
+import path from "node:path";
 
 // Import tool executors
 import { executeCreateNarrative } from "../../../src/tools/create-narrative";
@@ -26,6 +28,20 @@ import { executeBrainstorm } from "../../../src/tools/brainstorm";
 import { workspaceExporter } from "../../../src/storage/workspace";
 import { aiRouter } from "../../../src/ai/router";
 import { startJob } from "../../../src/jobs";
+
+// ---- SKILL.md injection: load the craft persona once at startup ----
+const SKILL_PATH = path.join(process.cwd(), "skill", "SKILL.md");
+let skillMdCache: string | null = null;
+function loadSkillMd(): string {
+  if (skillMdCache !== null) return skillMdCache;
+  try {
+    skillMdCache = fs.readFileSync(SKILL_PATH, "utf-8").trim();
+  } catch {
+    skillMdCache = "";
+    console.warn("[chat] Could not load SKILL.md from", SKILL_PATH);
+  }
+  return skillMdCache;
+}
 
 /**
  * Wrap a long, draft-mutating tool so the chat STARTS it as a background job and
@@ -128,11 +144,17 @@ export async function POST(req: Request) {
   // useChat sends UI messages (with `parts`); streamText needs model messages.
   const modelMessages = await convertToModelMessages(messages);
 
+  // ---- System prompt: inject SKILL.md + operational instructions ----
+  const skillContext = loadSkillMd();
   const baseSystem =
     "You are an autonomous AI Novel Writing Copilot. You orchestrate the tools to write, review, and revise stories. " +
     "apply_storyscope_revisions requires a StoryScope review to exist; it auto-increments the draft version. Do NOT re-run storyscope_final_review if a review (executive summary + lens reports) already exists for the project — only run it when none exists yet, then apply. Never run a review you already have. " +
     "If they ask you to research something, use web_search. If they ask to expand a novel from scratch, use expand_to_novel. " +
-    "You have access to narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.";
+    "You have access to narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.\n\n" +
+    "CRITICAL — when calling create_narrative, you MUST pass the full, detailed story idea (characters, beats, tone, setting, intended ending, everything discussed) into the `premise` field. The `logline` is only a short tag for naming; the `premise` is what the engine actually builds the story from. Compressing the discussion into a one-line logline will produce a different, worse story. Synthesize everything the user has discussed into the `premise`.\n\n" +
+    (skillContext
+      ? `=== ADVANCED WRITER SKILL (your craft persona — follow these principles) ===\n${skillContext}\n=== END SKILL ===\n`
+      : "");
 
   // Brainstorm surface: lead with MEANING, not plot mechanics. Interrogate why
   // a premise's familiar elements actually appeal before discussing execution.
@@ -158,7 +180,17 @@ export async function POST(req: Request) {
           "Build a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.",
         inputSchema: zodSchema(
           z.object({
-            logline: z.string().describe("One-sentence story premise"),
+            logline: z
+              .string()
+              .describe(
+                "One-sentence hook/title seed. Short. Used for naming and as a fallback if no full premise is given.",
+              ),
+            premise: z
+              .string()
+              .optional()
+              .describe(
+                "The FULL story idea in the author's own words — characters, world, tone, key beats, the desired ending, any constraints. THIS is what the cast, architecture, world bible, and prose are built from. Always provide this when you have it; do not compress the idea down to the logline.",
+              ),
             genre: z
               .string()
               .describe(
@@ -329,6 +361,12 @@ export async function POST(req: Request) {
               .describe(
                 "Optional feedback or direction for where the story should go next",
               ),
+            beat_order: z
+              .number()
+              .optional()
+              .describe(
+                "Optional 1-based index of the arc beat this scene delivers. If given, the engine loads that beat and only its related nodes (characters present, location) instead of the whole graph.",
+              ),
             version: z
               .string()
               .default("v1")
@@ -425,10 +463,11 @@ export async function POST(req: Request) {
               ),
           }),
         ),
-        execute: async (args) => {
-          const res = await executeStoryscopeFinalReview(args);
-          return res.content[0].text;
-        },
+        execute: runAsJob(
+          "storyscope_final_review",
+          executeStoryscopeFinalReview,
+          "the multi-agent StoryScope review",
+        ),
       }),
 
       apply_storyscope_revisions: tool({

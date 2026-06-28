@@ -13,7 +13,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  */
 const CRAFT_FILES = [
   "00-master-core-directives.md",
+  "01-neurochemical-engine.md",
+  "02-structural-paradigms.md",
+  "03-archetypal-database.md",
   "04-agency-enforcement.md",
+  "05-narrative-diagnostics.md",
+  "06-memory-and-tracking.md",
+  "07-authorial-ethics.md",
+  "narrative-research-summary.md",
   "storyscope-anti-patterns.md",
 ];
 

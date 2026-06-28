@@ -186,6 +186,8 @@ export default function Studio() {
   const [frBusy, setFrBusy] = useState<boolean>(false);
   const [frResult, setFrResult] = useState<any>(null);
   const [frApplied, setFrApplied] = useState<boolean>(false);
+  // ---- copilot mode (brainstorm vs. draft) ----
+  const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">("brainstorm");
 
   const { messages, sendMessage, status, setMessages } = useChat();
   const busy = status === "submitted" || status === "streaming";
@@ -253,7 +255,10 @@ export default function Studio() {
 
   const send = (text: string) => {
     if (!text.trim() || busy) return;
-    sendMessage({ text: `(Active project: ${activeId}) ${text}` });
+    sendMessage(
+      { text: `(Active project: ${activeId}) ${text}` },
+      { body: { mode: copilotMode } },
+    );
     setInput("");
   };
 
@@ -1008,6 +1013,18 @@ export default function Studio() {
               title="Conversation history"
             >
               🕘 History
+            </button>
+            <button
+              style={{
+                ...railBtn,
+                background: copilotMode === "brainstorm" ? "rgba(168,85,247,0.25)" : "rgba(124,217,146,0.18)",
+                color: copilotMode === "brainstorm" ? "#d8b4fe" : "#7cd992",
+                fontWeight: 600,
+              }}
+              onClick={() => setCopilotMode(copilotMode === "brainstorm" ? "draft" : "brainstorm")}
+              title={`Mode: ${copilotMode}. Click to switch.`}
+            >
+              {copilotMode === "brainstorm" ? "💡 Brainstorm" : "✎ Draft"}
             </button>
           </div>
           {(() => {
