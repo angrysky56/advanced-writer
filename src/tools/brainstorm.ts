@@ -84,6 +84,7 @@ What makes a premise good here:
 - Originality with coherence: a familiar truth seen from a new angle, or a single speculative element used as a lens on something real. Strangeness must illuminate, never merely decorate.
 - Inevitability: the premise already implies character, conflict, and stakes — you can sense the novel it wants to become.
 Stories are to be logically feasable, historically, and scientifically accurate.
+Ensure to apply the Bechdel test on stories with two or more named female characters. This is an absolute must.
 Science fiction and fantasy require plausible rules, focusing on the technology or mechanics is a sign of a weak story.
 We are looking for willing suspension of disbelief and the human element.
  A premise may be strange, but never empty of meaning or incoherent. Taste over novelty, always.
