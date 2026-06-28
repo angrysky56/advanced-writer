@@ -66,8 +66,11 @@ What makes a premise good here:
 - Specificity and restraint: ONE strong, fresh idea rendered concretely — not a pile of quirks or a mashup of unrelated elements.
 - Originality with coherence: a familiar truth seen from a new angle, or a single speculative element used as a lens on something real. Strangeness must illuminate, never merely decorate.
 - Inevitability: the premise already implies character, conflict, and stakes — you can sense the novel it wants to become.
+Stories are to be logically feasable, historically, and scientifically accurate.
+Science fiction and fantasy require plausible rules, focusing on the technology or mechanics is a sign of a weak story.
+We are looking for willing suspension of disbelief and the human element.
 
-Hard avoids: "X but also Y and Z" mashups; joke, pun, or absurdist premises; quirky-for-quirkiness's-sake whimsy; cute talking objects or animals; tone-stacking adjectives ("charmingly macabre"); random profession + random fantastical object. A premise may be strange, but never silly or incoherent. Taste over novelty, always.
+Hard avoids: memory selling, tear collecting, cartographer, lighthouse, maudlin, X but also Y and Z mashups; joke, pun, or absurdist premises; quirky-for-quirkiness's-sake whimsy; cute talking objects or animals; tone-stacking adjectives ("charmingly macabre"); random profession + random fantastical object. A premise may be strange, but never silly or incoherent. Taste over novelty, always.
 
 Give the ${count} concepts real range across genre, scale, and emotional register. ${ambitionFraming(
     level,
@@ -128,7 +131,8 @@ export const brainstormDef = {
       avoid: {
         type: "array",
         items: { type: "string" },
-        description: "Existing loglines to avoid repeating (for 'give me more').",
+        description:
+          "Existing loglines to avoid repeating (for 'give me more').",
       },
     },
   },
