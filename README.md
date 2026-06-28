@@ -37,9 +37,11 @@
     Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
 11. `apply_storyscope_revisions`
     Executes a massive Draft 2 background pass. Reads the StoryScope Executive Summary and systematically rewrites every drafted scene to aggressively apply the structural To-Do list. Non-destructive: writes to a new draft version.
-12. `check_job`
+12. `find_replace`
+    Deterministic find & replace across a story's documents — the literal counterpart to the AI rewrite tools. Renames a term everywhere, fixes a recurring typo, or changes a single word/line, touching ONLY the matched text. Defaults to a safe PREVIEW (apply=false) that reports every match without changing files; set apply=true to write the edits (each touched file is backed up first). Supports literal, whole-word, and regex matching.
+13. `check_job`
     Check the status/result of a background job started by running a long tool with async=true. Returns running | completed | failed plus the final summary.
-13. `list_jobs`
+14. `list_jobs`
     List recent background jobs (most recent first) with their status.
 
 ---
