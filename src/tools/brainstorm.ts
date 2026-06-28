@@ -1,5 +1,22 @@
 import { aiRouter } from "../ai/router.js";
 import { safeParseJson } from "../ai/extract.js";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SKILL_PATH = path.resolve(__dirname, "../../skill/SKILL.md");
+let skillMdCache: string | null = null;
+function loadSkillMd(): string {
+  if (skillMdCache !== null) return skillMdCache;
+  try {
+    skillMdCache = fs.readFileSync(SKILL_PATH, "utf-8").trim();
+  } catch {
+    skillMdCache = "";
+    console.warn("[brainstorm] Could not load SKILL.md from", SKILL_PATH);
+  }
+  return skillMdCache;
+}
 
 /**
  * Idea cannon for the Brainstorm board. Generates a batch of deliberately
@@ -59,7 +76,7 @@ export async function runBrainstorm(
           .join("\n")}`
       : "";
 
-  const systemPrompt = `You are a discerning developmental editor generating story concepts for a serious novelist's brainstorming board. Produce ${count} DISTINCT, genuinely good premises — the kind that could grow into a beloved or cult-classic novel — NOT gimmicks.
+  const systemPrompt = `You are a discerning developmental editor generating story concepts for a serious novelist's brainstorming board. Produce ${count} DISTINCT, genuinely good premises — the kind that could grow into a beloved or cult-classic — NOT gimmicks.
 
 What makes a premise good here:
 - A real emotional or philosophical engine: a human longing, fear, or question at its heart that a reader would actually feel.
@@ -69,8 +86,8 @@ What makes a premise good here:
 Stories are to be logically feasable, historically, and scientifically accurate.
 Science fiction and fantasy require plausible rules, focusing on the technology or mechanics is a sign of a weak story.
 We are looking for willing suspension of disbelief and the human element.
-
-Hard avoids: memory selling, tear collecting, cartographer, lighthouse, maudlin, X but also Y and Z mashups; joke, pun, or absurdist premises; quirky-for-quirkiness's-sake whimsy; cute talking objects or animals; tone-stacking adjectives ("charmingly macabre"); random profession + random fantastical object. A premise may be strange, but never silly or incoherent. Taste over novelty, always.
+ A premise may be strange, but never empty of meaning or incoherent. Taste over novelty, always.
+Hard avoids: conceptual implausibility or impossibility, e.g., selling or collecting of memories, emotions, or tears, cartographers and magical maps, lighthouse stories, maudlin or lachrymose stories, X but also Y and Z mashups; joke, pun, or absurdist premises; quirky-for-quirkiness's-sake whimsy; cute talking objects or animals; tone-stacking adjectives ("charmingly macabre"); random profession + random fantastical object.
 
 Give the ${count} concepts real range across genre, scale, and emotional register. ${ambitionFraming(
     level,
@@ -79,7 +96,11 @@ Give the ${count} concepts real range across genre, scale, and emotional registe
 Each concept is ONE evocative single-sentence logline (a real sentence, not a high-concept tagline), plus a genre, a tone, and a single sharp hook that DEEPENS the premise rather than gimmicks it up.
 
 Output ONLY JSON in exactly this shape, no prose around it:
-{"ideas":[{"logline":"...","genre":"...","tone":"...","hook":"..."}]}`;
+{"ideas":[{"logline":"...","genre":"...","tone":"...","hook":"..."}]}
+
+=== ADVANCED WRITER SKILL (your core principles) ===
+${loadSkillMd()}
+=== END SKILL ===`;
 
   const userMessage = [seedLine, avoidLine].filter(Boolean).join("\n\n");
 

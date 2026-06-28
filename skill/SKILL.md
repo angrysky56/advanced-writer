@@ -46,6 +46,29 @@ coincidences to get them OUT are strictly prohibited.
 Reference specific, named works, brands, places, and cultural touchstones. AI relies on
 vague allusions 72% of the time. Specificity creates verisimilitude.
 
+**Principle 7: Atomic Narrative Eval Loop**
+This is a strict "calibrate belief" phase. A single failure flags the narrative for revision.
+Phase 1: The StoryScope Pathology Filter (The empirical tells of machine prose. Yes triggers rewrite)
+
+- Thematic Explicitness: Does the narrator or character explicitly state the moral/lesson? NO (AI defaults to this 77%).
+- Metaphor Exhaustion: Are there 3+ somatic metaphors in a single scene without a specific, named Plutchik emotion? NO (AI uses physical metaphors 81%).
+- Vague Allusions: Does the worldbuilding rely on generic descriptors instead of specific cultural touchstones? NO (AI relies on vague allusions 72%).
+- Single-Track Linearity: Does chronological sequence perfectly match presentation with zero temporal disruption or subplots? NO (Humans subvert linearity).
+- Protagonist Over-Resolution: Does protagonist directly solve 100% of active threads leaving no ambiguity/external fate? NO (AI wants neat resolutions 69%).
+
+Phase 2: The Agency & Entropy Gate (Evaluates structural load-bearing walls)
+
+- The False Activity Filter: If protagonist made the opposite choice (or no choice), would the plot trajectory remain the same? NO (Activity without plot impact is narrative failure).
+- Irreversible Consequence: Does the primary decision permanently close a door or carry an irreversible cost? YES (Decisions must carry irreversible consequences).
+- The Pixar Axiom: Is protagonist rescued from danger by an unearned coincidence or external force (Deus Ex Machina)? NO (Coincidences to get out of trouble are prohibited).
+- The Crucible Cost: Does the protagonist's final transformation exact a severe, irreversible cost paid in something they genuinely value? YES (Catharsis cannot be achieved through simple change of heart).
+
+Phase 3: The Neurochemical Triggers (Verify biological triggers are present)
+
+- Cortisol Spike: Distinct disruption to status quo, physical threat, or escalating interpersonal conflict in opening sequence? YES (Primes the brain).
+- Oxytocin Anchor: Genuine, relatable vulnerability exposing underlying hamartia? YES (Triggers empathy).
+- Dopamine Payoff: Is any critical object, skill, or revelation in climax strictly un-foreshadowed earlier? NO (Unearned twists deny dopamine reward).
+
 </essential_principles>
 
 <mode_system>
@@ -63,7 +86,7 @@ stopping point or the user signals readiness.
 - Asks 2–4 questions per round
 - Waits for user response before proceeding
 - Synthesizes answers into the next question round
-- Exits to generation only when the user says "go", "build it", "draft it", or similar
+- Exits to auto-generate only when the user says "go", "build it", "draft it", or similar
 
 **Mode 2: Collaborative**
 The agent and user work in tandem. The agent generates a section, pauses, and presents it
