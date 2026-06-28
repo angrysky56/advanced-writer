@@ -16,12 +16,20 @@ export class ChromaStorage {
   public archetypes!: Collection;
   public lore!: Collection;
   public beats!: Collection;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
     this.client = new ChromaClient({
       host: ENV.CHROMA_HOST,
       port: ENV.CHROMA_PORT,
     });
+  }
+
+  async ensureInitialized() {
+    if (!this.initPromise) {
+      this.initPromise = this.initialize();
+    }
+    await this.initPromise;
   }
 
   async initialize() {
@@ -63,6 +71,7 @@ export class ChromaStorage {
     order: number,
     document: string,
   ) {
+    await this.ensureInitialized();
     try {
       await this.beats.upsert({
         ids: [id],
@@ -75,6 +84,7 @@ export class ChromaStorage {
   }
 
   async searchBeats(query: string, nResults: number = 2): Promise<string[]> {
+    await this.ensureInitialized();
     try {
       const results = await this.beats.query({
         queryTexts: [query],
@@ -91,6 +101,7 @@ export class ChromaStorage {
   }
 
   async addCharacter(record: CharacterRecord) {
+    await this.ensureInitialized();
     await this.characters.upsert({
       ids: [record.id],
       documents: [record.document],
@@ -99,6 +110,7 @@ export class ChromaStorage {
   }
 
   async addStory(record: StoryRecord) {
+    await this.ensureInitialized();
     await this.stories.upsert({
       ids: [record.id],
       documents: [record.document],
@@ -107,6 +119,7 @@ export class ChromaStorage {
   }
 
   async addScene(record: SceneRecord) {
+    await this.ensureInitialized();
     try {
       await this.scenes.upsert({
         ids: [record.id],
@@ -119,6 +132,7 @@ export class ChromaStorage {
   }
 
   async searchScenes(query: string, nResults: number = 2): Promise<string[]> {
+    await this.ensureInitialized();
     try {
       const results = await this.scenes.query({
         queryTexts: [query],
@@ -135,6 +149,7 @@ export class ChromaStorage {
   }
 
   async addLore(id: string, story_id: string, document: string) {
+    await this.ensureInitialized();
     try {
       await this.lore.upsert({
         ids: [id],
@@ -147,6 +162,7 @@ export class ChromaStorage {
   }
 
   async searchLore(query: string, nResults: number = 3): Promise<string[]> {
+    await this.ensureInitialized();
     try {
       const results = await this.lore.query({
         queryTexts: [query],
