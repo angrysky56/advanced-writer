@@ -223,6 +223,45 @@ export class WorkspaceExporter {
     }
   }
 
+  /** Character display names derived from the profile filenames in the story. */
+  async listCharacterNames(storyName: string): Promise<string[]> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "characters");
+    try {
+      const files = await fs.promises.readdir(dir);
+      return files
+        .filter((f) => f.endsWith(".md"))
+        .sort()
+        .map((f) =>
+          f
+            .replace(/\.md$/, "")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase()),
+        );
+    } catch {
+      return [];
+    }
+  }
+
+  /** Full markdown of all character profiles, concatenated (for read_story). */
+  async readAllCharacterProfiles(storyName: string): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "characters");
+    try {
+      const files = (await fs.promises.readdir(dir))
+        .filter((f) => f.endsWith(".md"))
+        .sort();
+      if (files.length === 0) return null;
+      const parts: string[] = [];
+      for (const f of files) {
+        parts.push(await fs.promises.readFile(path.join(dir, f), "utf8"));
+      }
+      return parts.join("\n\n---\n\n");
+    } catch {
+      return null;
+    }
+  }
+
   async readDraft(
     storyName: string,
     sceneId: string,

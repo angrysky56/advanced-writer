@@ -61,6 +61,47 @@ function runAsJob(
   };
 }
 
+/**
+ * Compact snapshot of the project open in the Studio, injected into the system
+ * prompt so the copilot knows what already exists (and uses read_story for full
+ * content) instead of asking the user to re-describe their own story.
+ */
+async function loadProjectContext(
+  storyId: string,
+  version: string,
+): Promise<string> {
+  try {
+    const [arch, chars, sceneFiles, versions, manuscript, worldBible] =
+      await Promise.all([
+        workspaceExporter.readArchitectureBrief(storyId),
+        workspaceExporter.listCharacterNames(storyId),
+        workspaceExporter.listDrafts(storyId, version),
+        workspaceExporter.listDraftVersions(storyId),
+        workspaceExporter.readManuscript(storyId, version),
+        workspaceExporter.readWorldBible(storyId),
+      ]);
+    const scenes = (sceneFiles || []).map((f: string) =>
+      f.replace(/\.md$/, ""),
+    );
+    const archSnippet = arch ? arch.replace(/\s+/g, " ").slice(0, 1500) : "";
+    const lines = [
+      `ACTIVE PROJECT: "${storyId}" (user is viewing draft ${version}).`,
+      `Available draft versions: ${(versions && versions.length ? versions : ["v1"]).join(", ")}.`,
+      chars.length ? `Characters: ${chars.join(", ")}.` : "Characters: none yet.",
+      scenes.length
+        ? `Scenes in ${version}: ${scenes.join(", ")}.`
+        : `Scenes in ${version}: none yet.`,
+      `Compiled manuscript for ${version}: ${manuscript ? `present (~${manuscript.length} chars)` : "not compiled yet"}.`,
+      `World bible: ${worldBible ? "present" : "none"}. Architecture brief: ${arch ? "present" : "none"}.`,
+      archSnippet ? `Architecture brief (excerpt): ${archSnippet}` : "",
+      "This project ALREADY EXISTS in the workspace. Do NOT ask the user what the story is about — call read_story to load the manuscript, a scene, the architecture brief, the world bible, the beat sheet, or the character profiles as needed, then act.",
+    ].filter(Boolean);
+    return "\n\n=== CURRENT PROJECT CONTEXT ===\n" + lines.join("\n");
+  } catch {
+    return "";
+  }
+}
+
 // No time cap: novel-length runs can take an hour or more. This system is
 // designed to run long; do NOT reintroduce a maxDuration cap. (Self-hosted
 // Next has no hard enforcement; the high value documents intent and avoids the
@@ -73,6 +114,8 @@ export async function POST(req: Request) {
     model: requestModel,
     modelOverrides,
     mode,
+    story_id: activeStoryId,
+    version: activeVersion,
   } = await req.json();
 
   if (modelOverrides) {
@@ -163,8 +206,14 @@ export async function POST(req: Request) {
     "When discussing any premise, begin with its APPEAL and underlying metaphor before mechanics. For every familiar element or trope (a 'well-worn door'), ask explicitly: What is the appeal? Why do people love this? Is it merely a plot device, or is it load-bearing metaphor? Then NAME the human pull underneath it — e.g. the person who isn't really himself (who we could have been); the one with a secret power (hiding from our own powerlessness); another life outside the mundane (escape); the return of what we buried (guilt, grief). A trope is a worn door for a reason: don't dismiss it — excavate why it resonates, then find the fresh, specific, emotionally true way to honor that core.\n" +
     "Only after the thematic/emotional engine is clear should you move to craft (structure, stakes, character, mechanics). Offer angles and questions; pull on what the writer is circling. Do NOT start writing, and do NOT run drafting tools, unless the user explicitly says they're ready. You may use brainstorm_ideas to generate or riff on concepts.";
 
-  const system =
+  let system =
     mode === "brainstorm" ? baseSystem + brainstormSystem : baseSystem;
+
+  // Give the copilot awareness of the project currently open in the Studio, so
+  // it never asks "what's the story about?" about a story sitting right there.
+  if (activeStoryId) {
+    system += await loadProjectContext(activeStoryId, activeVersion || "v1");
+  }
 
   const result = streamText({
     model: chatModel,
@@ -483,6 +532,85 @@ export async function POST(req: Request) {
           executeApplyStoryscopeRevisions,
           "the StoryScope revision (new draft version)",
         ),
+      }),
+
+      read_story: tool({
+        description:
+          "Read the ACTUAL existing content of a story from the workspace. Use this before expanding, revising, screenwriting, or answering questions about a story that already exists — never ask the user to re-describe a story that is already in the project. Returns the requested material as text.",
+        inputSchema: zodSchema(
+          z.object({
+            story_id: z
+              .string()
+              .describe("The story id (use the active project's id)."),
+            what: z
+              .enum([
+                "manuscript",
+                "scene",
+                "architecture",
+                "world_bible",
+                "beat_sheet",
+                "characters",
+                "scenes_list",
+              ])
+              .describe("Which material to read."),
+            scene_id: z
+              .string()
+              .optional()
+              .describe("Required when what='scene' (e.g. 'scene_1')."),
+            version: z
+              .string()
+              .optional()
+              .describe("Draft version (default 'v1')."),
+          }),
+        ),
+        execute: async ({ story_id, what, scene_id, version }) => {
+          const v = version || "v1";
+          try {
+            switch (what) {
+              case "manuscript":
+                return (
+                  (await workspaceExporter.readManuscript(story_id, v)) ||
+                  `(no compiled manuscript for ${v})`
+                );
+              case "scene":
+                if (!scene_id) return "(scene_id is required to read a scene)";
+                return (
+                  (await workspaceExporter.readDraft(story_id, scene_id, v)) ||
+                  `(no scene '${scene_id}' in ${v})`
+                );
+              case "architecture":
+                return (
+                  (await workspaceExporter.readArchitectureBrief(story_id)) ||
+                  "(no architecture brief yet)"
+                );
+              case "world_bible":
+                return (
+                  (await workspaceExporter.readWorldBible(story_id)) ||
+                  "(no world bible yet)"
+                );
+              case "beat_sheet":
+                return (
+                  (await workspaceExporter.readBeatSheet(story_id)) ||
+                  "(no beat sheet yet)"
+                );
+              case "characters":
+                return (
+                  (await workspaceExporter.readAllCharacterProfiles(story_id)) ||
+                  "(no character profiles yet)"
+                );
+              case "scenes_list": {
+                const files = await workspaceExporter.listDrafts(story_id, v);
+                return files && files.length
+                  ? files.map((f: string) => f.replace(/\.md$/, "")).join(", ")
+                  : `(no scenes in ${v})`;
+              }
+              default:
+                return "(unknown read target)";
+            }
+          } catch (e: any) {
+            return `(read error: ${e?.message || e})`;
+          }
+        },
       }),
 
       web_search: tool({

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { useWorkspace } from "../store/workspaceStore";
 
 /* ------------------------------------------------------------------ *
@@ -189,7 +190,22 @@ export default function Studio() {
   // ---- copilot mode (brainstorm vs. draft) ----
   const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">("brainstorm");
 
-  const { messages, sendMessage, status, setMessages } = useChat();
+  // Refs keep the transport body current without re-creating the chat client.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const versionRef = useRef(version);
+  versionRef.current = version;
+  // Send the active project + version with every chat request so the copilot
+  // can see (and read_story) the story open in the Studio.
+  const { messages, sendMessage, status, setMessages } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      body: () => ({
+        story_id: activeIdRef.current,
+        version: versionRef.current,
+      }),
+    }),
+  });
   const busy = status === "submitted" || status === "streaming";
 
   // ---- chat history (per-story, persisted) ----
