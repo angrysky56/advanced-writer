@@ -261,38 +261,54 @@ ${NAMING_RULE}`;
 
     if (args.mode === "fast-auto") {
       // One scene per beat — walk the arc timeline instead of a fixed count.
+      // Resumable + resilient: skip scenes already on disk, retry transient
+      // failures, and on an unrecoverable failure STOP cleanly (no fake partial
+      // manuscript). Compile only once every beat is drafted.
       const maxScenes = arc.length;
 
-      let lastGood = 1;
       for (let i = 2; i <= maxScenes; i++) {
+        const existing = await workspaceExporter.readDraft(
+          storyName,
+          `scene_${i}`,
+          "v1",
+        );
+        if (existing && existing.trim().length > 0) continue; // resume: keep it
+
         const beat = arc[i - 1] || null;
-        const res: any = await executeContinueNarrative({
-          story_id: storyName,
-          previous_scene_id: `scene_${i - 1}`,
-          next_scene_id: `scene_${i}`,
-          beat_order: i,
-          user_direction: beat
-            ? formatBeatDirective(beat)
-            : `Continue drafting scene ${i} of ${maxScenes} for a ${args.target_length}.`,
-        });
-        // Stop the chain on failure rather than silently producing orphaned
-        // or disconnected scenes downstream.
+        const MAX_SCENE_ATTEMPTS = 3;
+        let res: any = null;
+        for (let attempt = 1; attempt <= MAX_SCENE_ATTEMPTS; attempt++) {
+          res = await executeContinueNarrative({
+            story_id: storyName,
+            previous_scene_id: `scene_${i - 1}`,
+            next_scene_id: `scene_${i}`,
+            beat_order: i,
+            user_direction: beat
+              ? formatBeatDirective(beat)
+              : `Continue drafting scene ${i} of ${maxScenes} for a ${args.target_length}.`,
+          });
+          if (!res?.isError) break;
+          if (attempt < MAX_SCENE_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 1500 * attempt));
+          }
+        }
+        // Stop cleanly; do NOT compile a partial book or skip ahead leaving a
+        // hole. The finished scenes are preserved so a re-run resumes here.
         if (res?.isError) {
           return {
             content: [
               {
                 type: "text",
-                text: `create_narrative stopped at scene_${i}: ${res.content?.[0]?.text || "scene generation failed"}. Scenes 1-${lastGood} were drafted for ${storyName}; rerun continue_narrative from scene_${lastGood} to resume.`,
+                text: `Drafting stopped at scene_${i} of ${maxScenes} for "${storyName}" after ${MAX_SCENE_ATTEMPTS} attempts: ${res.content?.[0]?.text || "scene generation failed"}. ${i - 1} scene(s) are drafted and preserved; nothing was compiled (the book isn't finished). Re-run expand_to_novel (auto_draft) on this story to RESUME from scene_${i}.`,
               },
             ],
             isError: true,
           };
         }
-        lastGood = i;
       }
 
-      // Compile programmatically (no LLM "stitch" call) to avoid token
-      // truncation and content alteration on longer works.
+      // Compile programmatically (no LLM "stitch" call) — only now that the
+      // whole arc is drafted.
       const finalManuscript = await workspaceExporter.readAllDrafts(storyName);
       await workspaceExporter.saveManuscript(storyName, finalManuscript);
 
@@ -304,7 +320,7 @@ ${NAMING_RULE}`;
               .map((c) => c.meta.name)
               .join(
                 ", ",
-              )}. Generated ${maxScenes} scenes and compiled the final manuscript for ${storyName}.`,
+              )}. Drafted all ${maxScenes} scenes and compiled the final manuscript for ${storyName}.`,
           },
         ],
       };

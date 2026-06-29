@@ -8,6 +8,7 @@ import {
   generateAndSeedArc,
   checkWorldModelConsistency,
   formatBeatDirective,
+  parseBeatSheet,
 } from "./_arc.js";
 import { storySlug } from "../storage/story-id.js";
 
@@ -119,44 +120,76 @@ export async function executeExpandToNovel(args: any) {
       }
     }
 
-    // 4. ARC SCAFFOLD — explode the synopsis into an ordered beat timeline scaled
-    // to length (sheet + graph (:Beat)-[:NEXT]-> chain + Chroma), then REASON over
-    // the world model + arc for self-consistency before any drafting.
-    const beats = await generateAndSeedArc(
-      story_id,
-      synopsis,
-      castBrief,
-      worldBible,
-      target_length,
-    );
-    const consistency = await checkWorldModelConsistency(
-      story_id,
-      worldBible,
-      beats,
-    );
-    const arc = consistency.beats;
+    // 4. ARC SCAFFOLD — REUSE an existing arc if the story already has one, so a
+    // resumed run continues against the SAME beat timeline its scenes were
+    // written to (regenerating the arc mid-story would desync the drafted scenes
+    // from the plan). Reuse from the BEAT SHEET (lossless: it keeps every field,
+    // incl. `establishes` + `characters_present`), NOT the graph — getArc drops
+    // those, which fed resumed scenes thinner directives and caused a style seam
+    // at the resume boundary. Fall back to the graph only if the sheet is gone.
+    const existingSheet = await workspaceExporter.readBeatSheet(story_id);
+    let arc: any[] = parseBeatSheet(existingSheet || "");
+    if (!arc || arc.length === 0) {
+      arc = await neo4jStorage.getArc(story_id);
+    }
+    const reusedArc = arc && arc.length > 0;
+    let consistencyNote = "";
+    if (!reusedArc) {
+      const beats = await generateAndSeedArc(
+        story_id,
+        synopsis,
+        castBrief,
+        worldBible,
+        target_length,
+      );
+      const consistency = await checkWorldModelConsistency(
+        story_id,
+        worldBible,
+        beats,
+      );
+      arc = consistency.beats;
+      consistencyNote = consistency.consistent
+        ? ""
+        : " (world-model consistency issues were found and repaired — see structure/world-model-consistency.md)";
+    }
 
     if (!auto_draft) {
       return {
         content: [
           {
             type: "text",
-            text: `Arc scaffold generated for ${story_id}: ${arc.length} beats seeded into the beat sheet, the graph timeline, and Chroma${consistency.consistent ? "" : " (world-model consistency issues were found and repaired — see structure/world-model-consistency.md)"}. Review the beat sheet, then rerun with auto_draft=true to draft it.`,
+            text: reusedArc
+              ? `Reusing the existing ${arc.length}-beat arc for ${story_id}. Rerun with auto_draft=true to draft (or resume) it.`
+              : `Arc scaffold generated for ${story_id}: ${arc.length} beats seeded into the beat sheet, the graph timeline, and Chroma${consistencyNote}. Review the beat sheet, then rerun with auto_draft=true to draft it.`,
           },
         ],
       };
     }
 
-    // 5. Auto-draft — walk the arc beat by beat. Each scene goes through
-    // continue_narrative, which loads only that beat's related nodes and runs the
-    // per-scene continuity gate before saving.
+    // 5. Auto-draft — walk the arc beat by beat. This loop is RESUMABLE and
+    // RESILIENT:
+    //   - scenes already drafted on disk are SKIPPED, so a re-run continues from
+    //     the gap instead of redoing finished work,
+    //   - each scene is retried a few times on a transient failure,
+    //   - if a scene still can't be drafted, we STOP cleanly (we do NOT skip it
+    //     and draft later scenes — that would leave a book with a missing
+    //     chapter — and we do NOT compile a misleading partial manuscript).
+    //     The run is simply resumable: re-running picks up exactly here.
     let drafted = 0;
+    let skipped = 0;
     for (let i = 1; i <= arc.length; i++) {
-      const beat = arc[i - 1] || null;
+      // RESUME: if this scene already exists and isn't empty, keep it and move on.
+      const existing = await workspaceExporter.readDraft(
+        story_id,
+        `scene_${i}`,
+        version,
+      );
+      if (existing && existing.trim().length > 0) {
+        skipped++;
+        continue;
+      }
 
-      // Draft this beat, retrying a couple times on a transient failure so a
-      // single AI/network hiccup on (say) scene 7 doesn't abandon the whole
-      // manuscript. Only after the retries are exhausted do we stop.
+      const beat = arc[i - 1] || null;
       const MAX_SCENE_ATTEMPTS = 3;
       let res: any = null;
       for (let attempt = 1; attempt <= MAX_SCENE_ATTEMPTS; attempt++) {
@@ -172,21 +205,18 @@ export async function executeExpandToNovel(args: any) {
         });
         if (!res?.isError) break;
         if (attempt < MAX_SCENE_ATTEMPTS) {
-          // brief backoff before retrying the same beat
           await new Promise((r) => setTimeout(r, 1500 * attempt));
         }
       }
 
-      // Stop only after retries are exhausted, but compile what exists so
-      // partial work isn't lost.
+      // Unrecoverable for this scene: STOP cleanly. No partial manuscript is
+      // written; the drafted scenes stay on disk so re-running resumes here.
       if (res?.isError) {
-        const partial = await workspaceExporter.readAllDrafts(story_id, version);
-        await workspaceExporter.saveManuscript(story_id, partial, version);
         return {
           content: [
             {
               type: "text",
-              text: `Expansion stopped at scene_${i}: ${res.content?.[0]?.text || "scene generation failed"}. Drafted ${drafted} scene(s) for ${story_id} and compiled a partial manuscript. Rerun continue_narrative from scene_${drafted} to resume.`,
+              text: `Drafting stopped at scene_${i} of ${arc.length} for "${story_id}" after ${MAX_SCENE_ATTEMPTS} attempts: ${res.content?.[0]?.text || "scene generation failed"}. ${i - 1} scene(s) are drafted and preserved. Nothing was compiled (the book isn't finished). Re-run expand_to_novel (auto_draft) on this same story to RESUME — it will skip the ${i - 1} finished scenes and continue from scene_${i}.`,
             },
           ],
           isError: true,
@@ -195,7 +225,8 @@ export async function executeExpandToNovel(args: any) {
       drafted++;
     }
 
-    // 6. Compile the manuscript programmatically (no LLM stitch).
+    // 6. Only here — every beat has a drafted scene — do we compile the
+    // manuscript. A book is compiled only when it is actually complete.
     const finalManuscript = await workspaceExporter.readAllDrafts(
       story_id,
       version,
@@ -206,7 +237,7 @@ export async function executeExpandToNovel(args: any) {
       content: [
         {
           type: "text",
-          text: `Expansion complete! Walked ${arc.length} beats and drafted ${drafted} scenes (each through the consistency gate), then compiled the final ${target_length} manuscript for ${story_id}.`,
+          text: `Expansion complete! All ${arc.length} beats are drafted (${drafted} written this run${skipped ? `, ${skipped} already done` : ""}) and the final ${target_length} manuscript for "${story_id}" has been compiled.`,
         },
       ],
     };

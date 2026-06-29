@@ -27,6 +27,11 @@ const envSchema = z.object({
     .default("brainstorm"),
   NEUROCHEMICAL_PASS_THRESHOLD: z.coerce.number().default(7),
   MAX_REWRITE_ITERATIONS: z.coerce.number().default(3),
+  // Per-AI-request timeout (ms) and retry count. A stalled model response must
+  // abort and retry rather than hang an entire drafting run forever. The
+  // timeout is generous because a single scene generation is legitimately long.
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().default(300000), // 5 min/attempt
+  AI_MAX_RETRIES: z.coerce.number().default(2), // up to 3 attempts total
   MAX_PANKSEPP_ACTIVATIONS: z.coerce.number().default(2),
   MCP_TRANSPORT: z.enum(["stdio", "sse"]).default("stdio"),
   MCP_PORT: z.coerce.number().default(3100),

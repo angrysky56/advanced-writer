@@ -4,6 +4,7 @@ import { neo4jStorage } from "../storage/neo4j.js";
 import { chromaStorage } from "../storage/chroma.js";
 import { safeParseJson } from "../ai/extract.js";
 import { storySlug } from "../storage/story-id.js";
+import { loadArcDirectives } from "../ai/craft.js";
 
 export interface Beat {
   order: number;
@@ -37,6 +38,49 @@ function formatBeatSheet(beats: Beat[]): string {
       `- **Establishes:** ${b.establishes || "—"}`,
   );
   return `# Story Arc — Beat Sheet\n\n${lines.join("\n\n")}\n`;
+}
+
+/**
+ * Reconstruct full Beat objects from a saved beat-sheet.md. The graph
+ * (getArc) is LOSSY — it never stored `establishes` and omits
+ * `characters_present` — so resuming a run from the graph fed the drafter
+ * thinner directives than the original run, producing a visible style/quality
+ * seam at the resume boundary. The beat sheet keeps every field, so parsing it
+ * back makes arc REUSE byte-for-byte equivalent to a fresh arc.
+ */
+export function parseBeatSheet(md: string): Beat[] {
+  if (!md || !md.includes("## Beat")) return [];
+  const blocks = md.split(/^##\s+Beat\s+/m).slice(1);
+  const field = (block: string, label: string): string => {
+    const m = block.match(
+      new RegExp(`\\*\\*${label}:\\*\\*\\s*([\\s\\S]*?)(?=\\n-\\s\\*\\*|\\n##\\s|$)`),
+    );
+    const v = (m?.[1] ?? "").trim();
+    return v === "—" ? "" : v;
+  };
+  const beats: Beat[] = [];
+  for (const block of blocks) {
+    // Header line: "{order} — {act}: {title}"
+    const header = (block.split("\n", 1)[0] || "").trim();
+    const hm = header.match(/^(\d+)\s*(?:—\s*([^:]+):)?\s*(.*)$/);
+    const order = hm ? parseInt(hm[1], 10) : beats.length + 1;
+    const act = (hm?.[2] || "").trim();
+    const title = (hm?.[3] || "").trim();
+    const charsRaw = field(block, "Characters present");
+    beats.push({
+      order,
+      act,
+      title,
+      summary: field(block, "Summary"),
+      turn: field(block, "Dramatic turn"),
+      characters_present: charsRaw
+        ? charsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+        : [],
+      location: field(block, "Location"),
+      establishes: field(block, "Establishes"),
+    });
+  }
+  return beats.sort((a, b) => a.order - b.order);
 }
 
 function normalizeBeats(raw: any[]): Beat[] {
@@ -113,11 +157,20 @@ export async function generateAndSeedArc(
 ): Promise<Beat[]> {
   storyName = storySlug(storyName);
   const guidance = BEAT_GUIDANCE[targetLength] || "as many beats as the story needs";
-  const prompt = `You are a master story architect. Build the ARC of this story as an ordered list of beats — the spine the writer will follow scene by scene. Honor the author's idea, the established cast, and the world. Give the story a real shape (setup, escalation, turn, climax, resolution appropriate to its form). Scale to roughly ${guidance}, but serve the story, not the number.
+  const prompt = `You are a master story architect. Build the ARC of this story as an ordered list of beats — the spine the writer will follow scene by scene. Honor the author's idea, the established cast, and the world. Apply the CRAFT DIRECTIVES below as you shape it. Scale to roughly ${guidance}, but serve the story, not the number.
 
-For EACH beat give: the act/movement, a short title, a 1-2 sentence summary of what happens, the dramatic TURN (how the situation changes — what is different after), the characters PRESENT (use EXACT names from the cast), the primary LOCATION, and what the beat ESTABLISHES or pays off (plot, world fact, or character change).
+=== CRAFT DIRECTIVES (apply these to the arc itself) ===
+${loadArcDirectives()}
 
-Use ONLY the established cast for named characters. Keep the timeline causal and physically possible.
+=== HARD STRUCTURAL RULES (override the generic template) ===
+1. SHAPE — Use a Fichtean shape, NOT Freytag's pyramid. Place the CLIMAX very late — within the final ~15% of beats. Keep the RESOLUTION to at MOST one or two beats: do not linger; an extended denouement (three-plus falling-action beats covering one settled outcome) dissipates the tension you built. If the ending needs room, earn it with a real reversal, not repetition.
+2. NONLINEARITY — The presentation order (sjuzet) may diverge from chronology (fabula). You may open in medias res, use flashback/flash-forward, interleave timelines, or delay a key revelation, where it genuinely serves the story. The 'order' field is PRESENTATION order; the underlying events must stay causally coherent. Do not default to a single-track chronological chain.
+3. NO MORALIZING IN THE PLAN — The 'establishes' field must name what the beat concretely DOES for the plot, the world, or a character's state/relationship/knowledge — a function, not a message. Never write the story's theme, moral, or lesson into a beat (no "establishes the catharsis", no "shows that love conquers control"). The theme must stay implicit and be inferred from action; stating it here makes the drafter have characters voice it.
+4. AGENCY — Every beat must turn on a character's choice that, made differently, would change the trajectory. No beat may be passive setup or a coincidence that rescues the protagonist.
+
+For EACH beat give: the act/movement, a short title, a 1-2 sentence summary of what happens, the dramatic TURN (how the situation changes — what is different after), the characters PRESENT (use EXACT names from the cast), the primary LOCATION, and what the beat concretely ESTABLISHES/pays off in PLOT/WORLD/CHARACTER terms (a function, never the theme).
+
+Use ONLY the established cast for named characters. Keep events causally coherent (even if presented out of order).
 
 Output ONLY JSON:
 { "beats": [ { "order": 1, "act": "Act I / Setup", "title": "", "summary": "", "turn": "", "characters_present": ["Exact Name"], "location": "", "establishes": "" } ] }
