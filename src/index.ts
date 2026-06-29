@@ -3,8 +3,14 @@ import { ENV } from "./config.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express from "express";
+import { ensureChromaServer } from "./storage/chroma-server.js";
 
 async function main() {
+  // Bring up the bundled (no-Python) Chroma vector server eagerly so semantic
+  // retrieval is ready before any tool runs. Fail-open: never block startup.
+  ensureChromaServer().catch((e) =>
+    console.error("[chroma] auto-start error:", e),
+  );
   if (ENV.MCP_TRANSPORT === "stdio") {
     const transport = new StdioServerTransport();
     await server.connect(transport);

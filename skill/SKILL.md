@@ -77,7 +77,13 @@ The agent operates in three fluid modes. The user can switch between modes at AN
 during a workflow by stating their preference. Mode switching is instant and preserves
 all accumulated context.
 
-**Mode 1: Brainstorm Q&A (DEFAULT)**
+**The host application selects the active mode. The DEFAULT surface is Fast-Auto (Mode 3):
+the agent DRAFTS using the context on hand and does NOT interview the user.** Brainstorm Q&A
+is used ONLY when the brainstorm surface is explicitly active, or the user asks to brainstorm
+or explore. Never default to interrogating the user on the drafting surface — produce the
+work and let the user refine the result.
+
+**Mode 1: Brainstorm Q&A** (only when the brainstorm surface is active or requested)
 The agent drives an interview, asking targeted questions to elicit the user's vision before
 generating anything. Questions are domain-specific, drawn from the active workflow's reference
 material. The agent does NOT generate narrative text until the interview reaches a natural
@@ -131,9 +137,13 @@ What would you like to do?
 5. **Rewrite a scene** — Targeted scene-level improvement with neuro-critique feedback
 6. Something else (describe your goal)
 
-**Wait for response before proceeding.**
+**Only ask this intake question on the brainstorm surface.** On the default drafting surface,
+do NOT ask it — infer the intent from the user's message and route directly to the matching
+tool/workflow, drafting immediately.
 
-If intent is clear from the user's initial message, skip the intake question and route directly.
+If intent is clear from the user's initial message (it almost always is — e.g. "turn it into a
+screenplay", "write the next scene", "expand to a novella"), skip the intake question and route
+directly.
 
 </intake>
 

@@ -153,18 +153,32 @@ export async function executeExpandToNovel(args: any) {
     let drafted = 0;
     for (let i = 1; i <= arc.length; i++) {
       const beat = arc[i - 1] || null;
-      const res: any = await executeContinueNarrative({
-        story_id,
-        previous_scene_id: i === 1 ? "none" : `scene_${i - 1}`,
-        next_scene_id: `scene_${i}`,
-        beat_order: i,
-        user_direction: beat
-          ? formatBeatDirective(beat)
-          : `Write scene ${i} of ${arc.length}.`,
-        version,
-      });
 
-      // Stop on failure, but compile what exists so partial work isn't lost.
+      // Draft this beat, retrying a couple times on a transient failure so a
+      // single AI/network hiccup on (say) scene 7 doesn't abandon the whole
+      // manuscript. Only after the retries are exhausted do we stop.
+      const MAX_SCENE_ATTEMPTS = 3;
+      let res: any = null;
+      for (let attempt = 1; attempt <= MAX_SCENE_ATTEMPTS; attempt++) {
+        res = await executeContinueNarrative({
+          story_id,
+          previous_scene_id: i === 1 ? "none" : `scene_${i - 1}`,
+          next_scene_id: `scene_${i}`,
+          beat_order: i,
+          user_direction: beat
+            ? formatBeatDirective(beat)
+            : `Write scene ${i} of ${arc.length}.`,
+          version,
+        });
+        if (!res?.isError) break;
+        if (attempt < MAX_SCENE_ATTEMPTS) {
+          // brief backoff before retrying the same beat
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
+
+      // Stop only after retries are exhausted, but compile what exists so
+      // partial work isn't lost.
       if (res?.isError) {
         const partial = await workspaceExporter.readAllDrafts(story_id, version);
         await workspaceExporter.saveManuscript(story_id, partial, version);

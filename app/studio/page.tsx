@@ -188,7 +188,10 @@ export default function Studio() {
   const [frResult, setFrResult] = useState<any>(null);
   const [frApplied, setFrApplied] = useState<boolean>(false);
   // ---- copilot mode (brainstorm vs. draft) ----
-  const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">("brainstorm");
+  // Default to "draft": the Studio is a drafting surface, so the copilot should
+  // ACT (call the drafting tools) by default rather than interview the user.
+  // Users can still toggle to Brainstorm for discovery conversations.
+  const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">("draft");
 
   // Refs keep the transport body current without re-creating the chat client.
   const activeIdRef = useRef(activeId);

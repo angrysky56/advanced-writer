@@ -206,8 +206,23 @@ export async function POST(req: Request) {
     "When discussing any premise, begin with its APPEAL and underlying metaphor before mechanics. For every familiar element or trope (a 'well-worn door'), ask explicitly: What is the appeal? Why do people love this? Is it merely a plot device, or is it load-bearing metaphor? Then NAME the human pull underneath it — e.g. the person who isn't really himself (who we could have been); the one with a secret power (hiding from our own powerlessness); another life outside the mundane (escape); the return of what we buried (guilt, grief). A trope is a worn door for a reason: don't dismiss it — excavate why it resonates, then find the fresh, specific, emotionally true way to honor that core.\n" +
     "Only after the thematic/emotional engine is clear should you move to craft (structure, stakes, character, mechanics). Offer angles and questions; pull on what the writer is circling. Do NOT start writing, and do NOT run drafting tools, unless the user explicitly says they're ready. You may use brainstorm_ideas to generate or riff on concepts.";
 
+  // Draft surface: ACT, don't interview. The injected SKILL.md persona declares
+  // "Brainstorm Q&A (DEFAULT)" — which is correct for the brainstorm surface but
+  // WRONG here; left unchecked it makes the copilot ask round after round of
+  // questions and never draft. This overlay makes execution the default so a
+  // "write/expand/continue/turn into a screenplay" request goes straight to the
+  // tools using the context already on hand.
+  const executionSystem =
+    "\n\nEXECUTION MODE (this is the default surface — you are NOT in brainstorm mode). " +
+    "The SKILL.md '<mode_system>' marks 'Brainstorm Q&A' as its default and the '<intake>' step says to wait for the user — those apply ONLY to the brainstorm surface and are OVERRIDDEN here. In this mode you operate in Fast-Auto: you DRAFT. " +
+    "When the user asks to write, create, draft, expand, continue, or 'turn it into' a screenplay/novella/novel/scene/chapter, immediately CALL the appropriate tool — create_narrative, expand_to_novel (auto_draft), continue_narrative, rewrite_scene, or develop_character — using the project context and conversation you already have. The active project, its premise, cast, architecture brief, world bible and beat sheet are already available to you (and read_story can load any of it); do NOT re-ask what the story is about. " +
+    "Do NOT interview the user. Do NOT ask clarifying or scoping questions before acting. Make the most reasonable assumptions from the existing material and PRODUCE the draft — the user refines afterward by reading the result, not by answering questionnaires. If something is genuinely, blockingly missing (e.g. no premise exists at all), make a sensible choice and proceed anyway; ask at most ONE short question only when you truly cannot proceed without it. " +
+    "Bias hard toward completing the whole requested artifact (the full screenplay/manuscript), not a single scene. For multi-scene work prefer expand_to_novel with auto_draft so the entire piece is drafted, not just the opening.";
+
   let system =
-    mode === "brainstorm" ? baseSystem + brainstormSystem : baseSystem;
+    mode === "brainstorm"
+      ? baseSystem + brainstormSystem
+      : baseSystem + executionSystem;
 
   // Give the copilot awareness of the project currently open in the Studio, so
   // it never asks "what's the story about?" about a story sitting right there.

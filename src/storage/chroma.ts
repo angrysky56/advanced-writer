@@ -1,6 +1,7 @@
 import { ChromaClient, Collection } from "chromadb";
 import { ENV } from "../config.js";
 import { OllamaEmbeddingFunction } from "@chroma-core/ollama";
+import { ensureChromaServer } from "./chroma-server.js";
 import {
   CharacterRecord,
   StoryRecord,
@@ -33,6 +34,9 @@ export class ChromaStorage {
   }
 
   async initialize() {
+    // Make sure the local Chroma server is actually running before we try to
+    // open collections — start the bundled (no-Python) server if it isn't.
+    await ensureChromaServer();
     const ollamaEmbeddingFunction = new OllamaEmbeddingFunction({
       url: ENV.OLLAMA_BASE_URL,
       model: ENV.OLLAMA_EMBEDDING_MODEL,
