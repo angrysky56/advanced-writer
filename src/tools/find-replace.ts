@@ -70,12 +70,12 @@ export interface FindReplaceResult {
 const MAX_BACKUPS = 10;
 const MAX_SAMPLES = 6;
 
-function escapeRegExp(s: string): string {
+export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Build the search regex for a single match (no global flag). */
-function buildBase(opts: FindReplaceOptions): RegExp {
+export function buildBase(opts: FindReplaceOptions): RegExp {
   const flags = opts.caseSensitive ? "" : "i";
   if (opts.mode === "regex") return new RegExp(opts.find, flags);
   if (opts.mode === "whole-word")
@@ -88,7 +88,7 @@ function buildBase(opts: FindReplaceOptions): RegExp {
  * must be escaped from JS's replacement-pattern handling. In regex mode we
  * leave `$1` etc. intact so capture-group backreferences work.
  */
-function prepareReplacement(opts: FindReplaceOptions): string {
+export function prepareReplacement(opts: FindReplaceOptions): string {
   if (opts.mode === "regex") return opts.replace;
   return opts.replace.replace(/\$/g, "$$$$");
 }
@@ -140,7 +140,7 @@ async function collectMd(dir: string, base: string): Promise<string[]> {
 }
 
 /** Decide whether a relative file path passes the kind/version/story filters. */
-function passesFilters(rel: string, opts: FindReplaceOptions): boolean {
+export function passesFilters(rel: string, opts: FindReplaceOptions): boolean {
   const parts = rel.split(path.sep);
   // parts[0] = story slug, parts[1] = kind folder, ...
   if (opts.storyId && parts[0] !== opts.storyId) return false;
