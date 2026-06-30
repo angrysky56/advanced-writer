@@ -20,6 +20,8 @@
 
 ## The Writing Studio IDE
 
+![UI](Screenshot_2026-06-29_18-15-42.png)
+
 The primary interface of the system is the **Writing Studio IDE** (available at `http://localhost:3000`), which replaces the classic chatbot with a three-pane workspace tailored for professional fiction development:
 
 1. **Narrative Explorer (Left Panel)**: A tree-view directory that displays active stories, available draft versions (e.g. `v1`, `v2`, `v3`), individual scenes, character sheets, structure briefs, and generated export assets.
