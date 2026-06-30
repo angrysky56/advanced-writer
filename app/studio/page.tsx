@@ -617,6 +617,8 @@ export default function Studio() {
             { label: "+ New story", run: () => send(`Start a brand-new story with create_narrative — ask me for the logline, genre, tone, and length.`) },
             { label: "📋 StoryScope audit", run: () => send(`Run storyscope_final_review on this project for version "${version}" (async).`) },
             { label: "✎ Apply revisions", run: () => send(`Run apply_storyscope_revisions on this project (async), reading the review for source version "${version}".`) },
+            { label: running === "publish" ? "…making e-book + PDF" : `📦 Publish ${version} (e-book + PDF)`, run: () => runTool("publish", "publish_story", { story_id: activeId, version, target: "share" }) },
+            { label: running === "amazon" ? "…building Amazon kit" : `🛒 Publish ${version} to Amazon`, run: () => runTool("amazon", "publish_story", { story_id: activeId, version, target: "amazon" }) },
           ];
 
   // ---- center content ----

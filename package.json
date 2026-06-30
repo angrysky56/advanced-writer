@@ -26,8 +26,10 @@
     "chromadb": "latest",
     "dotenv": "latest",
     "express": "^5.2.1",
+    "jszip": "^3.10.1",
     "neo4j-driver": "latest",
     "next": "^16.2.9",
+    "puppeteer": "^25.2.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zod": "^4.4.3",
@@ -41,7 +43,7 @@
     "eslint": "latest",
     "prettier": "latest",
     "tsx": "latest",
-    "typescript": "^5.8",
+    "typescript": "^5.9.3",
     "vitest": "latest"
   },
   "overrides": {

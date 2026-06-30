@@ -60,6 +60,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
           ? cur
           : stories[0]?.id || "";
       set({ stories, version: v, activeId });
+
+      // If the caller didn't ask for a specific version, jump to the active
+      // story's MOST RECENT draft so the Studio shows (and publishes) the
+      // latest work by default instead of v1.
+      if (version === undefined) {
+        const story = stories.find((s: any) => s.id === activeId);
+        const vers: string[] = story?.availableVersions || [];
+        const latest = vers.length ? vers[vers.length - 1] : v;
+        if (latest && latest !== v) {
+          await get().loadWorkspace(latest);
+        }
+      }
     } catch {
       /* ignore — keep prior state */
     } finally {
@@ -83,15 +95,15 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   init: async () => {
-    await get().loadWorkspace(get().version);
+    await get().loadWorkspace(); // no version → defaults to latest
     await get().loadArc(get().activeId);
   },
 
   setActiveId: (id) => {
     if (!id || id === get().activeId) return;
-    // Switching story resets to its first draft version and reloads its data.
+    // Switching story reloads its data and defaults to its most recent version.
     set({ activeId: id, version: "v1" });
-    get().loadWorkspace("v1");
+    get().loadWorkspace(); // no version → jumps to latest for this story
     get().loadArc(id);
   },
 
