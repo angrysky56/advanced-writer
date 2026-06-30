@@ -77,6 +77,103 @@ const C = {
   accentSoft: "rgba(168,85,247,0.15)",
 };
 
+/** Author-controlled steering note for a character. Persists to the graph and
+ *  is injected into drafting (the agent honors it; scene tracking never
+ *  overwrites it). Keyed by character name so it resets when you switch. */
+function AuthorNoteEditor({
+  storyId,
+  name,
+  initial,
+  onSaved,
+}: {
+  storyId: string;
+  name: string;
+  initial: string;
+  onSaved: () => void;
+}) {
+  const [val, setVal] = useState(initial || "");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const save = async () => {
+    setSaving(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/character-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ story_id: storyId, name, author_note: val }),
+      });
+      const d = await r.json().catch(() => ({}));
+      setMsg(
+        d?.ok
+          ? "Saved — the agent will use this on the next draft."
+          : "Saved, but character wasn't found in the live graph.",
+      );
+      onSaved();
+    } catch {
+      setMsg("Save failed.");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setMsg(""), 5000);
+    }
+  };
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <textarea
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder="Steer this character for the coming scenes… e.g. 'Let her control crack — small, real warmth toward Matteo.'"
+        style={{
+          width: "100%",
+          minHeight: 66,
+          background: C.panel2,
+          color: C.text,
+          border: `1px solid ${C.border}`,
+          borderRadius: 6,
+          padding: 8,
+          fontSize: "0.78rem",
+          lineHeight: 1.5,
+          resize: "vertical",
+          fontFamily: "inherit",
+          boxSizing: "border-box",
+        }}
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{
+            background: C.accentSoft,
+            color: C.accent,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            padding: "4px 12px",
+            fontSize: "0.75rem",
+            cursor: saving ? "default" : "pointer",
+          }}
+        >
+          {saving ? "Saving…" : "Save direction"}
+        </button>
+        {msg && <span style={{ fontSize: "0.7rem", color: C.dim }}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Render a continuity-sheet value readably (objects/arrays → text, not
+ *  "[object Object]"). */
+function fmtSheet(v: any): string {
+  if (v == null) return "";
+  if (Array.isArray(v))
+    return v.map(fmtSheet).filter(Boolean).join("; ");
+  if (typeof v === "object")
+    return Object.entries(v)
+      .map(([k, val]) => `${k}: ${fmtSheet(val)}`)
+      .filter(Boolean)
+      .join(", ");
+  return String(v);
+}
+
 /** Minimal, safe markdown → JSX (headings, bullets, bold, paragraphs). */
 function Markdown({ text }: { text: string }) {
   if (!text) return null;
@@ -755,7 +852,7 @@ export default function Studio() {
                       .map((k) => (
                         <div key={k}>
                           <b style={{ color: "rgba(255,255,255,0.6)" }}>{k}:</b>{" "}
-                          {c.scratchpad[k]}
+                          {fmtSheet(c.scratchpad[k])}
                         </div>
                       ))}
                   </div>
@@ -774,18 +871,72 @@ export default function Studio() {
       if (!c) return null;
       return (
         <div>
-          <Section title="Panksepp drives" />
-          {Object.entries(c.panksepp || {}).map(([k, v]: any) => (
-            <Bar key={k} label={k} v={v} />
-          ))}
+          <button
+            style={{ ...linkBtn, marginBottom: 8 }}
+            onClick={() => setSel({ type: "manuscript" })}
+          >
+            ← Back to manuscript
+          </button>
+          <Section title="✎ Author direction (the agent honors this)" />
+          <AuthorNoteEditor
+            key={sel.id}
+            storyId={activeId}
+            name={sel.id}
+            initial={a?.author_note || ""}
+            onSaved={() => useWorkspace.getState().loadArc(activeId)}
+          />
+          {(() => {
+            const snaps = a?.snapshots || [];
+            const latest = snaps[snaps.length - 1];
+            const livePk =
+              latest?.panksepp && typeof latest.panksepp === "object"
+                ? latest.panksepp
+                : null;
+            const livePl =
+              latest?.plutchik && typeof latest.plutchik === "object"
+                ? latest.plutchik
+                : null;
+            const asOf = latest?.scene ? ` — now (${latest.scene})` : "";
+            const numEntries = (o: any) =>
+              Object.entries(o || {}).filter(([, v]) => typeof v === "number");
+            return (
+              <>
+                <Section title={`Panksepp drives${livePk ? asOf : " (baseline)"}`} />
+                {(livePk
+                  ? numEntries(livePk)
+                  : Object.entries(c.panksepp || {})
+                ).map(([k, v]: any) => (
+                  <Bar key={k} label={k} v={v} />
+                ))}
+                {livePl && numEntries(livePl).length > 0 && (
+                  <>
+                    <Section title={`Plutchik emotions${asOf}`} />
+                    {numEntries(livePl).map(([k, v]: any) => (
+                      <Bar key={k} label={k} v={v} />
+                    ))}
+                  </>
+                )}
+                <Muted
+                  text={
+                    livePk
+                      ? "Live — the agent updates these each scene and now writes from them."
+                      : "Baseline (no scene snapshots yet — drafting will start tracking these)."
+                  }
+                />
+              </>
+            );
+          })()}
           <Section title="Continuity sheet" />
           {a?.scratchpad ? (
             <div style={{ fontSize: "0.74rem", color: C.dim, lineHeight: 1.6 }}>
-              {Object.entries(a.scratchpad).map(([k, v]: any) => (
-                <div key={k}>
-                  <b style={{ color: "rgba(255,255,255,0.6)" }}>{k}:</b> {String(v)}
-                </div>
-              ))}
+              {Object.entries(a.scratchpad)
+                .filter(([, v]) => fmtSheet(v))
+                .map(([k, v]: any) => (
+                  <div key={k}>
+                    <b style={{ color: "rgba(255,255,255,0.6)" }}>{k}:</b>{" "}
+                    {fmtSheet(v)}
+                  </div>
+                ))}
             </div>
           ) : (
             <Muted text="No scratchpad recorded yet." />
@@ -806,12 +957,10 @@ export default function Studio() {
         ) : (
           <Muted text="No StoryScope review yet. Ask the copilot to run one." />
         )}
+        {/* Cast lives in the left sidebar (single source). Select a character
+            there to see their detail here. */}
         <Section title="Cast" />
-        {(story.characters || []).map((c: any, i: number) => (
-          <button key={i} style={linkBtn} onClick={() => setSel({ type: "character", id: c.name })}>
-            {c.name} <span style={{ color: C.dim }}>— {c.archetype}</span>
-          </button>
-        ))}
+        <Muted text="Pick a character from the CAST list on the left to see their drives, continuity sheet, and affect arc here." />
       </div>
     );
   };

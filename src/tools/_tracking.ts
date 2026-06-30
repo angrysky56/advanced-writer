@@ -223,6 +223,87 @@ ${sceneText}`;
 }
 
 /** Build a human-readable state-sheet block to inject before writing a scene. */
+/** Top-N highest-scoring keys of an affect object, as "key N, key N". */
+function topAffect(obj: any, n = 3): string {
+  if (!obj || typeof obj !== "object") return "";
+  return Object.entries(obj)
+    .filter(([, v]) => typeof v === "number")
+    .sort((a: any, b: any) => b[1] - a[1])
+    .slice(0, n)
+    .map(([k, v]) => `${k} ${v}`)
+    .join(", ");
+}
+
+/**
+ * The DIRECTOR. Before a scene is written, give each present character a precise
+ * performance note — the emotion to play and where the beat must move it (from
+ * the feeling they carry in), their objective in the scene, and how to play it —
+ * grounded in the beat and obeying any AUTHOR DIRECTION. This is handed to the
+ * writer ("the actors") so they play the scene to intent instead of guessing.
+ *
+ * `characters` should be the RICH state objects from getStoryState (they carry
+ * current_affect, hamartia, scratchpad, author_note). Fail-open to "".
+ */
+export async function buildDirectorNotes(
+  beatDirective: string,
+  characters: any[],
+): Promise<string> {
+  const present = (characters || []).filter((c) => c && c.name);
+  if (present.length === 0) return "";
+
+  const roster = present
+    .map((c) => {
+      const aff = c.current_affect;
+      const feeling =
+        [
+          topAffect(aff?.panksepp) && `drives ${topAffect(aff?.panksepp)}`,
+          topAffect(aff?.plutchik) && `emotions ${topAffect(aff?.plutchik)}`,
+        ]
+          .filter(Boolean)
+          .join("; ") || "(no prior feeling tracked)";
+      let wants = "";
+      try {
+        const sp = c.scratchpad ? JSON.parse(c.scratchpad) : {};
+        wants = typeof sp.wants === "string" ? sp.wants : "";
+      } catch {
+        /* ignore */
+      }
+      return (
+        `- ${c.name}${c.role ? ` (${c.role})` : ""}\n` +
+        `  carries in: ${feeling}\n` +
+        (wants ? `  wants: ${wants}\n` : "") +
+        (c.hamartia ? `  flaw: ${c.hamartia}\n` : "") +
+        (c.author_note && String(c.author_note).trim()
+          ? `  AUTHOR DIRECTION (obey exactly): ${String(c.author_note).trim()}\n`
+          : "")
+      );
+    })
+    .join("\n");
+
+  const prompt = `You are a film DIRECTOR giving each actor a precise note in the moment before this scene is performed. For EACH character below, write 2-4 sentences of actable direction:
+1) EMOTION: what they play, and the arc of it — name where they START (use "carries in") and where THIS BEAT must move them by the end.
+2) OBJECTIVE: what they are actively trying to get or do in this scene (their motivation, concrete).
+3) HOW TO PLAY IT: the subtext, restraint vs. release, the physical/verbal tell.
+Obey any AUTHOR DIRECTION exactly. Ground every note in THIS BEAT — no generic notes. Output ONLY a list: "- Name: <direction>".
+
+=== THIS BEAT ===
+${beatDirective || "(no beat — continue naturally)"}
+
+=== ACTORS (and what they carry into the scene) ===
+${roster}`;
+
+  try {
+    const out = await aiRouter.generateCompletion({
+      taskType: "brainstorm",
+      systemPrompt: prompt,
+      userMessage: "Give each actor their precise direction for this scene.",
+    });
+    return (out || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 export function buildScratchpadContext(characters: any[]): string {
   const lines = (characters || [])
     .map((c) => {
@@ -232,6 +313,19 @@ export function buildScratchpadContext(characters: any[]): string {
       } catch {
         sp = {};
       }
+      // Render values readably — relationships/holding are often objects or
+      // arrays, and "${obj}" yields "[object Object]", which fed the AGENT
+      // garbage and lost relationship continuity.
+      const fmt = (v: any): string => {
+        if (v == null) return "";
+        if (Array.isArray(v)) return v.map(fmt).filter(Boolean).join("; ");
+        if (typeof v === "object")
+          return Object.entries(v)
+            .map(([k, val]) => `${k}: ${fmt(val)}`)
+            .filter(Boolean)
+            .join(", ");
+        return String(v);
+      };
       const fields = [
         "location",
         "wants",
@@ -241,9 +335,33 @@ export function buildScratchpadContext(characters: any[]): string {
         "last_action",
       ]
         .filter((k) => sp[k])
-        .map((k) => `${k}: ${sp[k]}`)
+        .map((k) => `${k}: ${fmt(sp[k])}`)
         .join("; ");
-      return `- ${c.name}${c.role ? ` (${c.role})` : ""}: ${fields || "no state recorded yet"}`;
+      // CURRENT FEELING — the character's live affect, carried into this scene so
+      // it acts knowing how it feels, then lets the scene shift it believably.
+      const top = (obj: any): string => {
+        if (!obj || typeof obj !== "object") return "";
+        return Object.entries(obj)
+          .filter(([, v]) => typeof v === "number")
+          .sort((a: any, b: any) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(", ");
+      };
+      const aff = c.current_affect;
+      const drives = top(aff?.panksepp);
+      const emotions = top(aff?.plutchik);
+      const feeling =
+        drives || emotions
+          ? `\n    ↳ CURRENT FEELING (write them true to this, then let the scene move it): ${[drives && `drives — ${drives}`, emotions && `emotions — ${emotions}`].filter(Boolean).join("; ")}`
+          : "";
+      // The author's persistent steering note (set in the Studio) carries the
+      // most weight — surface it explicitly so authorial intent overrides drift.
+      const note =
+        c.author_note && String(c.author_note).trim()
+          ? `\n    ↳ AUTHOR DIRECTION (honor this): ${String(c.author_note).trim()}`
+          : "";
+      return `- ${c.name}${c.role ? ` (${c.role})` : ""}: ${fields || "no state recorded yet"}${feeling}${note}`;
     })
     .join("\n");
   return lines || "No character state on record yet.";

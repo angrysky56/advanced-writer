@@ -135,6 +135,19 @@ export class Neo4jStorage {
       // token-bloat source, so we expose only the live arc-relevant fields.
       const characters = charsResult.records.map((record) => {
         const p = record.get("c").properties;
+        // The character's CURRENT feeling — the most recent affect snapshot the
+        // agent recorded. Fed into the next scene so the character carries its
+        // emotional state forward (knows how it feels) instead of writing blind.
+        let current_affect: any = null;
+        const log = Array.isArray(p.affect_log) ? p.affect_log : [];
+        if (log.length) {
+          try {
+            const last = log[log.length - 1];
+            current_affect = typeof last === "string" ? JSON.parse(last) : last;
+          } catch {
+            current_affect = null;
+          }
+        }
         return {
           name: p.name,
           archetype: p.archetype,
@@ -145,6 +158,10 @@ export class Neo4jStorage {
           panksepp_primary: p.panksepp_primary,
           current_state: p.current_state,
           scratchpad: p.scratchpad,
+          current_affect,
+          // Author-controlled steering note (persists; never overwritten by
+          // scene tracking) — injected into drafting so the writer can steer.
+          author_note: p.author_note,
         };
       });
 
@@ -314,6 +331,48 @@ export class Neo4jStorage {
           now: new Date().toISOString(),
         },
       );
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Set the author-controlled steering note on a character. Unlike the
+   * scratchpad/current_state (which scene tracking overwrites), this persists
+   * until the author changes it, and is injected into drafting so edits steer
+   * the next scene.
+   */
+  async setCharacterAuthorNote(
+    storyId: string,
+    characterName: string,
+    note: string,
+  ): Promise<boolean> {
+    storyId = storySlug(storyId);
+    const session = this.getSession();
+    try {
+      const res = await session.run(
+        `
+        MATCH (c:Character)
+        WHERE $storyId IN c.story_ids AND (
+          toLower(c.name) = toLower($name)
+          OR toLower(c.name) CONTAINS toLower($name)
+          OR toLower($name) CONTAINS toLower(c.name)
+        )
+        WITH c LIMIT 1
+        SET c.author_note = $note, c.updated_at = $now
+        RETURN c.name AS name
+        `,
+        {
+          name: characterName,
+          storyId,
+          note: note || "",
+          now: new Date().toISOString(),
+        },
+      );
+      return res.records.length > 0;
+    } catch (e) {
+      console.error("Neo4j setCharacterAuthorNote error:", e);
+      return false;
     } finally {
       await session.close();
     }

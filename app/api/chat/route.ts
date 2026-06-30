@@ -57,7 +57,7 @@ function runAsJob(
 ) {
   return async (args: any) => {
     const rec = startJob(tool, args, () => exec(args));
-    return `Started ${describe} as background job ${rec.id}. It runs in the background and the Studio refreshes automatically when it finishes — tell the user it's running and to watch the draft-version selector for the new version. Do NOT wait or claim it is already done.`;
+    return `Started ${describe} — ONE background job, id ${rec.id}. Report THIS single job only: tell the user it's running in the background and to watch the draft-version selector for the new version (the Studio refreshes on its own when it finishes). Do NOT claim it's done, do NOT invent a multi-job status table, and do NOT describe any other jobs as running — only ${rec.id}.`;
   };
 }
 
@@ -194,6 +194,7 @@ export async function POST(req: Request) {
     "apply_storyscope_revisions requires a StoryScope review to exist; it auto-increments the draft version. Do NOT re-run storyscope_final_review if a review (executive summary + lens reports) already exists for the project — only run it when none exists yet, then apply. Never run a review you already have. " +
     "If they ask you to research something, use web_search. If they ask to expand a novel from scratch, use expand_to_novel. " +
     "You have access to narrative engineering tools to build character decks, select story architectures, write scene drafts, score neurochemical pacing, and debate character agency.\n\n" +
+    "BACKGROUND JOBS — be precise and never fabricate. When you start an async tool you get back ONE job id; report exactly that single job and tell the user it's running in the background and to watch the draft-version selector for the new version. To report status, CALL `list_jobs` or `check_job` and read the result — do NOT invent a status table or describe jobs from memory. `list_jobs` separates jobs that are RUNNING NOW from finished history; only the RUNNING ones are active — never describe finished/history jobs as in-progress, and never claim multiple pipelines are running unless `list_jobs` shows multiple with status running. Do not re-run reviews or revisions for versions the user didn't ask about.\n\n" +
     "CRITICAL — when calling create_narrative, you MUST pass the full, detailed story idea (characters, beats, tone, setting, intended ending, everything discussed) into the `premise` field. The `logline` is only a short tag for naming; the `premise` is what the engine actually builds the story from. Compressing the discussion into a one-line logline will produce a different, worse story. Synthesize everything the user has discussed into the `premise`.\n\n" +
     (skillContext
       ? `=== ADVANCED WRITER SKILL (your craft persona — follow these principles) ===\n${skillContext}\n=== END SKILL ===\n`

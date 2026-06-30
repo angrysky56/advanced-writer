@@ -31,6 +31,7 @@ export async function GET(req: Request) {
         name: c.name,
         role: c.role || "",
         panksepp_primary: c.panksepp_primary || "",
+        author_note: c.author_note || "",
         scratchpad,
         snapshots,
       };

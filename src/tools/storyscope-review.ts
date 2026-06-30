@@ -177,6 +177,66 @@ ${manuscript}`,
       };
     }
 
+    // ACTORS' TABLE — the cast grades their own performance. Unlike the prose
+    // lenses, this one also reads the DIRECTOR'S NOTES (the per-scene intent) and
+    // each character's RECORDED emotional arc (the achieved affect), and judges
+    // intended-vs-achieved across the whole manuscript. Additive + fail-open.
+    try {
+      const directorNotes = await workspaceExporter.readAllDirectorNotes(
+        story_id,
+        version,
+      );
+      const chars = await neo4jStorage.getCharactersForStory(story_id);
+      const top = (o: any): string =>
+        Object.entries(o || {})
+          .filter(([, v]) => typeof v === "number")
+          .sort((a: any, b: any) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(", ");
+      const affectArc = (chars || [])
+        .map((c: any) => {
+          const log = Array.isArray(c.affect_log) ? c.affect_log : [];
+          const arc = log
+            .map((s: any) => {
+              try {
+                const o = typeof s === "string" ? JSON.parse(s) : s;
+                return `${o.scene}: ${top(o.plutchik)}`;
+              } catch {
+                return "";
+              }
+            })
+            .filter(Boolean)
+            .join(" | ");
+          return `### ${c.name}\nemotional arc (per scene): ${arc || "(none tracked)"}`;
+        })
+        .join("\n\n");
+
+      if (directorNotes.trim() || affectArc.trim()) {
+        const actorsPrompt = `You are the full CAST at a table read, with an acting coach. For EACH principal character, evaluate their PERFORMANCE across the finished manuscript:
+- Did the scenes deliver the feeling and objective the DIRECTOR set (see Director's Notes), and a believable, non-flat emotional ARC (see the recorded per-scene affect)?
+- Name the SPECIFIC scenes where the performance rang false, went flat, skipped an emotional beat, or contradicted who the character is.
+- Distinguish a genuine performance failure from deliberate, earned restraint — do not punish a quiet beat that is doing real work.
+End EACH character with a line starting "DEMAND:" — the one concrete, scene-referenced fix that character wants in the next draft. Be specific, brutal, and fair. Markdown.`;
+        const actorsReport = await aiRouter.generateCompletion({
+          taskType: "diagnostic",
+          systemPrompt: actorsPrompt,
+          userMessage: `=== DIRECTOR'S NOTES (the per-scene intent the actors were given) ===\n${directorNotes || "(none recorded)"}\n\n=== RECORDED EMOTIONAL ARCS (what each character actually felt, scene by scene) ===\n${affectArc || "(none)"}\n\n=== MANUSCRIPT ===\n${manuscript}`,
+        });
+        if (actorsReport && actorsReport.trim()) {
+          await workspaceExporter.saveStoryscopeReport(
+            story_id,
+            "actors_table",
+            actorsReport,
+            version,
+          );
+          reports.push({ aspect: "actors_table", report: actorsReport });
+        }
+      }
+    } catch (e) {
+      console.error("Actors' Table lens failed (non-fatal):", e);
+    }
+
     // Synthesize Executive Summary
     const synthesisPrompt = `You are the Executive Editor-in-Chief. Your team of specialist dramaturgs and structuralists have provided deep-dive reports on the manuscript from multiple distinct analytical lenses (Plot, Agents, Perspective, etc.).
 
@@ -189,6 +249,8 @@ Read all reports and synthesize them into a single, cohesive "Executive Summary"
 4. A prioritized To-Do List split into exactly two buckets:
    - (A) REVISE PROSE — craft fixes only (the genuine weaknesses from section 2).
    - (B) UPDATE CANON — reconcile the planning docs to the manuscript (from section 3).
+
+One lens, ACTORS_TABLE, is the cast grading their own emotional performance scene by scene against the Director's intent. Treat its "DEMAND:" lines as first-class craft fixes — fold the genuine ones (a character feeling false, flat, or off-arc in a specific scene) into bucket (A) REVISE PROSE, scene-referenced.
 
 Never recommend rewriting good prose merely to conform to an earlier outline. Format beautifully in Markdown.`;
 

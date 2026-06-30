@@ -5,7 +5,11 @@ import { chromaStorage } from "../storage/chroma.js";
 import { storySlug } from "../storage/story-id.js";
 import { DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
 import { loadCraftDirectives, NAMING_RULE } from "../ai/craft.js";
-import { recordSceneTracking, buildScratchpadContext } from "./_tracking.js";
+import {
+  recordSceneTracking,
+  buildScratchpadContext,
+  buildDirectorNotes,
+} from "./_tracking.js";
 import { formatBeatDirective } from "./_arc.js";
 import { enforceSceneConsistency } from "./_gate.js";
 
@@ -148,6 +152,27 @@ export async function executeContinueNarrative(args: any) {
         : storyState.characters || [];
     const scratchpadContext = buildScratchpadContext(presentChars);
 
+    // DIRECTOR step — before writing, set each present character's feeling,
+    // objective, and how-to-play-it for THIS scene. Use the RICH state from the
+    // graph (carries current_affect, hamartia, author_note) for the actors in
+    // this beat, so the notes are precise and grounded.
+    const presentNames = new Set(
+      (presentChars || []).map((c: any) => String(c.name || "").toLowerCase()),
+    );
+    const richPresent = presentNames.size
+      ? (storyState.characters || []).filter((c: any) =>
+          presentNames.has(String(c.name || "").toLowerCase()),
+        )
+      : storyState.characters || [];
+    const directorNotes = await buildDirectorNotes(beatDirective, richPresent);
+    // Persist the intent so the StoryScope Actors' Table can grade the achieved
+    // performance against what the Director asked for.
+    if (directorNotes && directorNotes.trim()) {
+      await workspaceExporter
+        .saveDirectorNotes(story_id, next_scene_id, directorNotes, version)
+        .catch(() => {});
+    }
+
     const semanticScenes = await chromaStorage.searchScenes(
       user_direction || "next scene",
       2,
@@ -172,6 +197,7 @@ export async function executeContinueNarrative(args: any) {
 ${loadCraftDirectives()}
 
 ${beatDirective ? `=== THIS SCENE'S BEAT (write THIS — deliver this beat and its turn) ===\n${beatDirective}\n` : ""}
+${directorNotes ? `=== DIRECTOR'S NOTES (the most important performance guide — play EACH character to their note: the feeling to play and where to take it, their objective, and how to play it) ===\n${directorNotes}\n` : ""}
 === WORLD CONTINUITY LEDGER (facts the story has ALREADY established — a reference to stay consistent with and verify against, NOT the source you write from) ===
 ${worldBible}
 

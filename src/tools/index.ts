@@ -126,11 +126,16 @@ export async function executeTool(name: string, args: any) {
     const jobs = listJobs();
     if (jobs.length === 0)
       return { content: [{ type: "text", text: "No background jobs yet." }] };
-    const lines = jobs.map(
-      (j) =>
-        `- ${j.id} ${j.tool} → ${j.status}${j.finishedAt ? ` (done ${j.finishedAt})` : ` (started ${j.startedAt})`}`,
-    );
-    return { content: [{ type: "text", text: lines.join("\n") }] };
+    const running = jobs.filter((j) => j.status === "running");
+    const finished = jobs.filter((j) => j.status !== "running").slice(0, 6);
+    const fmt = (j: any) => `- ${j.id} ${j.tool}${j.args?.version ? ` (${j.args.version})` : ""}`;
+    const text =
+      `RUNNING NOW (${running.length}) — only these are still in progress:\n` +
+      (running.length ? running.map(fmt).join("\n") : "  (none — nothing is running)") +
+      `\n\nAlready finished (history, NOT running):\n` +
+      (finished.length ? finished.map((j) => `${fmt(j)} → ${j.status}`).join("\n") : "  (none)") +
+      `\n\nNOTE: Report ONLY the RUNNING jobs as active. The finished list is history — do not describe it as in-progress.`;
+    return { content: [{ type: "text", text }] };
   }
 
   return dispatch(name, args);

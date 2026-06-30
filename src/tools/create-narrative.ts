@@ -4,7 +4,7 @@ import { chromaStorage } from "../storage/chroma.js";
 import { executeContinueNarrative } from "./continue-narrative.js";
 import { generateAndSeedCast } from "./_cast.js";
 import { storySlug } from "../storage/story-id.js";
-import { recordSceneTracking } from "./_tracking.js";
+import { recordSceneTracking, buildDirectorNotes } from "./_tracking.js";
 import { executeBuildWorldBible } from "./build-world-bible.js";
 import {
   generateAndSeedArc,
@@ -182,6 +182,29 @@ ${castBrief}`;
     // 4. Draft Scene 1 — to BEAT 1, using the canon cast and obeying the rules.
     const beat1 = arc[0] || null;
     const beat1Directive = formatBeatDirective(beat1);
+
+    // DIRECTOR step for the OPENING scene (the seed). No prior affect yet, so the
+    // Director sets each character's STARTING feeling + objective from the beat
+    // and their flaw — establishing where the arc begins.
+    const present1 = new Set(
+      (beat1?.characters_present || []).map((n: any) =>
+        String(n).toLowerCase(),
+      ),
+    );
+    const rich1 = cast
+      .filter(
+        (c) => present1.size === 0 || present1.has(c.meta.name.toLowerCase()),
+      )
+      .map((c) => ({
+        name: c.meta.name,
+        role: c.meta.role,
+        hamartia: c.meta.hamartia,
+        current_affect: null,
+        scratchpad: null,
+        author_note: null,
+      }));
+    const directorNotes1 = await buildDirectorNotes(beat1Directive, rich1);
+
     const draftPrompt = `Write the opening scene for this story, delivering the beat below.
 
 === AUTHOR'S STORY IDEA (the source of truth — honor it) ===
@@ -192,6 +215,7 @@ Tone: ${tone}
 === THIS SCENE'S BEAT (write THIS) ===
 ${beat1Directive || "Open the story."}
 
+${directorNotes1 ? `=== DIRECTOR'S NOTES (play EACH character to their note — the feeling to establish, their objective, and how to play it) ===\n${directorNotes1}\n` : ""}
 === CRAFT DIRECTIVES (apply these WHILE writing) ===
 ${loadCraftDirectives()}
 
@@ -222,6 +246,11 @@ ${NAMING_RULE}`;
     draft = gate1.text;
 
     await workspaceExporter.saveDraft(storyName, "scene_1", draft);
+    if (directorNotes1 && directorNotes1.trim()) {
+      await workspaceExporter
+        .saveDirectorNotes(storyName, "scene_1", directorNotes1, "v1")
+        .catch(() => {});
+    }
 
     await chromaStorage
       .initialize()

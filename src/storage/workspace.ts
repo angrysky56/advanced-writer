@@ -314,6 +314,46 @@ export class WorkspaceExporter {
     }
   }
 
+  /** Persist the Director's per-scene performance notes (the INTENT), so the
+   *  StoryScope Actors' Table can later judge achieved-vs-intended. */
+  async saveDirectorNotes(
+    storyName: string,
+    sceneId: string,
+    notes: string,
+    version: string = "v1",
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "direction", version);
+    await this.ensureDir(dir);
+    const filePath = path.join(dir, `${this.sanitizeFilename(sceneId)}.md`);
+    await fs.promises.writeFile(filePath, notes || "", "utf8");
+    return filePath;
+  }
+
+  /** All Director notes for a version, in scene order. */
+  async readAllDirectorNotes(
+    storyName: string,
+    version: string = "v1",
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "direction", version);
+    try {
+      const files = (await fs.promises.readdir(dir))
+        .filter((f) => f.endsWith(".md"))
+        .sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+        );
+      let out = "";
+      for (const f of files) {
+        const content = await fs.promises.readFile(path.join(dir, f), "utf8");
+        out += `\n\n### ${f.replace(/\.md$/, "")}\n${content}`;
+      }
+      return out.trim();
+    } catch {
+      return "";
+    }
+  }
+
   /** List existing draft version folders (e.g. ["v1","v2","v3"]). */
   async listDraftVersions(storyName: string): Promise<string[]> {
     const storySlug = this.sanitizeFilename(storyName);

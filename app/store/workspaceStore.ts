@@ -131,11 +131,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         .join("|");
       const prev = get()._jobsSig;
       set({ jobs, _jobsSig: sig });
-      // A job finished since the last poll → pull fresh content into all views.
-      // (Skip the very first poll, when prev is empty, to avoid a load-time
-      // refresh storm.)
+      // A job finished since the last poll → pull fresh content AND jump to the
+      // latest version, since a draft/revision job usually creates a new one
+      // (e.g. apply_storyscope_revisions → v4). This makes the new version show
+      // up on its own instead of the user having to reload the UI.
+      // (Skip the very first poll, when prev is empty, to avoid a load storm.)
       if (prev && sig !== prev) {
-        get().refresh();
+        await get().loadWorkspace(); // undefined → newest version
+        await get().loadArc(get().activeId);
       }
     } catch {
       /* ignore */
