@@ -555,6 +555,50 @@ export class WorkspaceExporter {
       return null;
     }
   }
+
+  /**
+   * Snapshot a canon planning document (World Bible / Architecture Brief)
+   * before it is overwritten by canon reconciliation, so a bad AI rewrite is
+   * always recoverable. Never overwrites — each backup gets its own timestamp.
+   */
+  async backupCanonDoc(
+    storyName: string,
+    docName: string,
+    content: string,
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "structure", "canon-backups");
+    await this.ensureDir(dir);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filePath = path.join(dir, `${docName}.${stamp}.md`);
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
+
+  /**
+   * Append one entry to the StoryScope changelog for a version — a persistent,
+   * human-readable record of what apply_storyscope_revisions / the canon
+   * reconciler actually did, since the tool responses themselves are ephemeral.
+   */
+  async appendStoryscopeChangelog(
+    storyName: string,
+    version: string | undefined,
+    entryMarkdown: string,
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = this.storyscopeDir(storySlug, version);
+    await this.ensureDir(dir);
+    const filePath = path.join(dir, "changelog.md");
+    let existing = "";
+    try {
+      existing = await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      existing = "# StoryScope Changelog\n";
+    }
+    const content = `${existing.trimEnd()}\n\n${entryMarkdown.trim()}\n`;
+    await fs.promises.writeFile(filePath, content, "utf8");
+    return filePath;
+  }
 }
 
 export const workspaceExporter = new WorkspaceExporter();

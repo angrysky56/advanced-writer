@@ -187,8 +187,9 @@ The advanced-writer framework features a suite of 11 native MCP tools plus an in
     - _Situatedness_: Cultural unmooring, historical references
     - _Social Networks_: Character relationships, power dynamics
       Synthesizes these reports into an Executive Summary containing a Draft 2 prioritized action plan.
-11. **apply_storyscope_revisions**: Builds the next draft version (auto-increments v1→v2→v3…, non-destructive) by applying BOTH the Executive Summary action plan AND the full specialist lens reports to every scene. Any two versions can be diffed in the Studio UI.
-12. **web_search**: Searches the web to retrieve specific names, places, cultural touchstones, and domain terms to inject verisimilitude (combats vague allusions).
+11. **apply_storyscope_revisions**: Builds the next draft version (auto-increments v1→v2→v3…, non-destructive) by applying the Executive Summary's REVISE PROSE bucket (informed by the full specialist lens reports) to only the flagged scenes. Every rewrite is reminded of the same craft/anti-pattern directives used at first-draft time, re-checked against the World Bible's hard rules/continuity, and re-scored on the neurochemical/pathology diagnostic — then logged to a persistent changelog. Accepts an optional human-approved/edited `directives` plan (and `exclude_scenes`) so the user's review of the Executive Summary actually reaches the rewrite. Any two versions can be diffed in the Studio UI. Only revises prose — never touches canon.
+12. **reconcile_storyscope_canon**: The other half of the review's to-do list. Applies the Executive Summary's UPDATE CANON bucket: updates the World Bible, Architecture Brief, and character graph metadata so the planning documents catch up to manuscript improvements the review judged as-good-or-better. Backs up the previous World Bible/Architecture Brief before overwriting and logs to the same changelog. Never touches scene text.
+13. **web_search**: Searches the web to retrieve specific names, places, cultural touchstones, and domain terms to inject verisimilitude (combats vague allusions).
 
 </automated_mcp_tools>
 
@@ -221,7 +222,7 @@ All domain knowledge in `references/`:
 | build-world-bible.md  | Autonomously expand a premise into a massive World Bible | 00                           |
 | expand-to-novel.md    | Outline a beat sheet and autonomously draft a full novel | All references               |
 | batch-revise.md       | Character Writer's Room pathology revision               | 03, 04, 05                   |
-| storyscope-review.md  | 10-lens structural audit and automated revisions         | 05, storyscope-anti-patterns |
+| storyscope-review.md  | 10-lens structural audit, prose revision, and canon reconciliation | 05, storyscope-anti-patterns |
 
 </workflows_index>
 
