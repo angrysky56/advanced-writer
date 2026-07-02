@@ -19,14 +19,16 @@
 10. storyscope_final_review
     Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
 11. apply_storyscope_revisions
-    Builds the next draft version from the StoryScope review. Carries every scene forward, then SELECTIVELY rewrites only the scenes the critique flags (most scenes are left untouched). Non-destructive and auto-incrementing (v1->v2->v3...).
-12. find_replace
+    Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...). The planner assigns each critique issue to EXACTLY ONE operation: 'rewrite' (full-scene revision), 'line_edit' (surgical anchored edits that preserve polished prose), 'cut_scene', 'merge_scenes', or 'add_scene' — so structural fixes the review asks for are actually executable. Every change is (a) checked against the World Bible's hard rules, (b) VERIFIED against its own directive (PASS/FAIL with cited evidence, retried with auditor feedback on FAIL), (c) re-scored on the neurochemical diagnostic, and (d) logged with deterministic diff stats. Ends with a COVERAGE REPORT mapping every critique item -> op -> scene -> verified status (including items it could NOT action, honestly), and updates the persistent cross-version issue ledger. Pass 'directives' to apply a human-approved/edited plan instead of the auto-generated one. This tool only revises PROSE — for canon reconciliation use reconcile_storyscope_canon.
+12. reconcile_storyscope_canon
+    Applies the StoryScope review's CANON RECONCILIATION findings: updates the World Bible, Architecture Brief, and character graph metadata so the planning documents catch up to the manuscript's improvements. Complements apply_storyscope_revisions, which only rewrites prose and deliberately ignores canon divergence — this tool is the other half of the review's to-do list and never touches scene text. Non-destructive: the previous World Bible / Architecture Brief are backed up before being overwritten, and every run appends to a persistent changelog.
+13. find_replace
     Deterministic find & replace across a story's documents — the literal counterpart to the AI rewrite tools. Renames a term everywhere, fixes a recurring typo, or changes a single word/line, touching ONLY the matched text. Defaults to a safe PREVIEW (apply=false) that reports every match without changing files; set apply=true to write the edits (each touched file is backed up first). Supports literal, whole-word, and regex matching.
-13. brainstorm_ideas
+14. brainstorm_ideas
     Generate a batch of genuinely good, distinct story concepts (logline + genre + tone + hook) for brainstorming — premises with a real emotional core and a fresh angle, the kind that could become a beloved or cult-classic novel, never gimmicks or absurdist mashups. Use when the user wants fresh story ideas, riffs on a seed, or 'more like that' — discussion only; this never starts writing a story.
-14. publish_story
+15. publish_story
     Package a finished story for publishing. target='amazon' (default) produces the full Amazon/KDP kit: e-book, cover image, print-ready paperback PDF, a listing sheet (description, keywords, categories), and a plain-language upload walkthrough. target='share' produces just a clean e-book + reading PDF. Non-destructive: writes to the project's publish/ folder. Use when the user wants to publish, sell, export, or ship their finished book.
-15. check_job
+16. check_job
     Check the status/result of a background job started by running a long tool with async=true. Returns running | completed | failed plus the final summary.
-16. list_jobs
+17. list_jobs
     List recent background jobs (most recent first) with their status.

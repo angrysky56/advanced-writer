@@ -127,75 +127,72 @@ Neo4j is utilized to map complex character networks, archetypal structures, and 
 2. **Add to MCP Client**:
    Reference [mcp_config.json.example](file:///home/ty/Repositories/ai_workspace/advanced-writer/mcp_config.json.example) to register the server in your MCP client (e.g. Claude Desktop, Cursor). Make sure the path points to your built [dist/index.js](file:///home/ty/Repositories/ai_workspace/advanced-writer/dist/index.js).
 3. **Run the Web Studio UI**:
-   Start the Next.js development server:
    ```bash
    npm run dev:ui
    ```
    Open `http://localhost:3000` in your web browser.
 
----
-
 ## MCP Tools Reference
 
-The Model Context Protocol server exposes **16 specialized tools** to handle the narrative engineering lifecycle:
+The Model Context Protocol server exposes **17 specialized tools** to handle the narrative engineering lifecycle:
 
 ### Idea & Brainstorming
 
 1. [brainstorm_ideas](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/brainstorm.ts)
-   Generates a batch of distinct, high-quality story concepts (logline + genre + tone + hook) based on a thematic seed. Calibrates to a `wildness` scale (0 = literary realism, 100 = visionary/speculative) and applies strict quality controls (e.g. Bechdel compliance, avoiding clichés). Discussion-only; does not write files.
+   Generate a batch of genuinely good, distinct story concepts (logline + genre + tone + hook) for brainstorming — premises with a real emotional core and a fresh angle, the kind that could become a beloved or cult-classic novel, never gimmicks or absurdist mashups. Use when the user wants fresh story ideas, riffs on a seed, or 'more like that' — discussion only; this never starts writing a story.
 
 ### Narrative Architecture
 
-2. [create_narrative](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/create-narrative.ts)
-   Builds a narrative blueprint from a premise. Runs an 8-step pipeline: Intake → Hamartia → Structural Framework → Cast generation → Story Architecture brief → Beat Sheet → Scene Outline → Final Diagnostic.
+2. [create_narrative](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/create-narrative.ts) (Async-capable)
+   Build a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
 3. [select_structure](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/select-structure.ts)
-   Analyzes the story's "Designing Principle" and guides the selection of a structural paradigm (Truby's Organic Architecture, Dramatica, Kishōtenketsu, or the Fichtean Curve).
+   Interactively select the right structural framework (Truby, Dramatica, Kishōtenketsu, Fichtean) for a story based on its Designing Principle.
 4. [build_world_bible](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/build-world-bible.ts)
-   Expands a premise into a structured World Bible containing Factions, Tech/Magic, Economics, and Geography, saving the definitions to ChromaDB.
+   Expands a premise into a highly detailed World Bible including Factions, Tech/Magic, Economics, and Geography, and saves it to Vector Memory.
 
 ### Character & Cast Setup
 
 5. [develop_character](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/develop-character.ts)
-   Maintains the persistent Archetypal Database. Creates, updates, lists, or queries character sheets containing Jungian Archetypes, Core Hamartias, Pankseppian affective systems, and Plutchikian emotions.
+   Create, update, query, list, or shadow-match characters in the persistent Archetypal Database.
 
 ### Drafting & Expansion
 
 6. [expand_to_novel](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/expand-to-novel.ts) (Async-capable)
-   Expands a brief synopsis into a structured Beat Sheet and automatically drafts the entire manuscript scene by scene.
+   Expands a synopsis into a structured ARC (beat-sheet scaffold seeded into the graph timeline + Chroma), runs a world-model self-consistency check, and optionally auto-drafts the whole manuscript beat by beat with the per-scene continuity gate.
 7. [continue_narrative](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/continue-narrative.ts) (Async-capable)
-   Generates the next scene or chapter based on the previous scene's text, the overall story architecture, and manual author directions.
+   Continue drafting a story by generating the next scene based on the previous scene, the story architecture, and user direction.
 
 ### Diagnosis & Editing
 
 8. [review_narrative](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/review-narrative.ts)
-   Runs neurochemical scoring (Dopamine/Oxytocin/Cortisol curves) and scans for common AI pathologies (clichés, moralizing endings, bodily metaphors).
+   Run neurochemical scoring, pathology diagnostics, and agency enforcement on existing text. Produces a structured neuro-critique report.
 9. [rewrite_scene](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/rewrite-scene.ts)
-   Executes a targeted scene rewrite. Takes before/after neurochemical scores, addresses specific pathologies, and returns an updated draft version.
+   Targeted scene rewriting with before/after neurochemical scoring. Identifies specific pathologies and produces an improved version.
 10. [batch_revise_pathologies](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/batch-revise-pathologies.ts) (Async-capable)
-    Iterates over failed scenes, convenes a virtual "Character Writers' Room" to debate solutions, and rewrites the scenes according to character feedback.
+    Scans a story's diagnostics, triggers a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
 11. [find_replace](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/find-replace.ts)
-    Performs deterministic find-and-replace edits across a story's files. Supports regex and whole-word matching. Defaults to a preview mode; creates backups when writing.
+    Deterministic find & replace across a story's documents — the literal counterpart to the AI rewrite tools. Renames a term everywhere, fixes a recurring typo, or changes a single word/line, touching ONLY the matched text. Defaults to a safe PREVIEW (apply=false) that reports every match without changing files; set apply=true to write the edits (each touched file is backed up first). Supports literal, whole-word, and regex matching.
 
 ### Post-Draft Analysis & Second Draft Pass
 
 12. [storyscope_final_review](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/storyscope-review.ts) (Async-capable)
-    Runs the ultimate multi-agent critique on a finished manuscript. Dispatches 9 parallel analytical lenses based on StoryScope research (Style, Plot, Perspective, Setting, Social Networks, Temporal Structure, Revelation, situatedness, and events) and compiles an Executive Summary.
+    Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
 13. [apply_storyscope_revisions](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/apply-storyscope-revisions.ts) (Async-capable)
-    Takes the critique from the StoryScope review and applies a second-draft pass across the entire manuscript scene-by-scene, outputting to a new draft version.
+    Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...). The planner assigns each critique issue to EXACTLY ONE operation: 'rewrite' (full-scene revision), 'line_edit' (surgical anchored edits that preserve polished prose), 'cut_scene', 'merge_scenes', or 'add_scene' — so structural fixes the review asks for are actually executable. Every change is (a) checked against the World Bible's hard rules, (b) VERIFIED against its own directive (PASS/FAIL with cited evidence, retried with auditor feedback on FAIL), (c) re-scored on the neurochemical diagnostic, and (d) logged with deterministic diff stats. Ends with a COVERAGE REPORT mapping every critique item -> op -> scene -> verified status (including items it could NOT action, honestly), and updates the persistent cross-version issue ledger. Pass 'directives' to apply a human-approved/edited plan instead of the auto-generated one. This tool only revises PROSE — for canon reconciliation use reconcile_storyscope_canon.
+14. [reconcile_storyscope_canon](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/reconcile-storyscope-canon.ts) (Async-capable)
+    Applies the StoryScope review's CANON RECONCILIATION findings: updates the World Bible, Architecture Brief, and character graph metadata so the planning documents catch up to the manuscript's improvements. Complements apply_storyscope_revisions, which only rewrites prose and deliberately ignores canon divergence — this tool is the other half of the review's to-do list and never touches scene text. Non-destructive: the previous World Bible / Architecture Brief are backed up before being overwritten, and every run appends to a persistent changelog.
 
 ### Publishing & Export
 
-14. [publish_story](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/publish-story.ts)
-    Packages a completed story. Non-destructive: outputs are written to the project's `publish/` subdirectory:
-    - **`target='amazon'`** (default): Prepares a complete KDP self-publishing kit. Spawns headless Puppeteer to render a custom typography-styled cover image (`cover.png`) and a print-ready paperback PDF interior (`-paperback.pdf`) with mirrored gutter margins, builds a reflowable Kindle EPUB (`.epub`), and generates listing metadata (`listing.md` with keywords/categories) and a step-by-step upload guide.
-    - **`target='share'`**: Produces a clean reader-friendly EPUB and reading PDF.
+15. [publish_story](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/publish-story.ts)
+    Package a finished story for publishing. target='amazon' (default) produces the full Amazon/KDP kit: e-book, cover image, print-ready paperback PDF, a listing sheet (description, keywords, categories), and a plain-language upload walkthrough. target='share' produces just a clean e-book + reading PDF. Non-destructive: writes to the project's publish/ folder. Use when the user wants to publish, sell, export, or ship their finished book.
 
 ### Background Job Management
 
-15. [check_job](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/index.ts)
-    Polls the progress, status (`running` | `completed` | `failed`), and output summary of a background job.
-16. [list_jobs](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/index.ts)
-    Lists all background job IDs and statuses in chronological order.
+16. [check_job](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/index.ts)
+    Check the status/result of a background job started by running a long tool with async=true. Returns running | completed | failed plus the final summary.
+17. [list_jobs](file:///home/ty/Repositories/ai_workspace/advanced-writer/src/tools/index.ts)
+    List recent background jobs (most recent first) with their status.
 
 ---
 

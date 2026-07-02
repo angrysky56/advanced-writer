@@ -164,32 +164,25 @@ directly.
 
 <automated_mcp_tools>
 
-The advanced-writer framework features a suite of 11 native MCP tools plus an integrated search tool to handle everything from core drafting and character psychology to autonomous generation, multi-agent audits, and external research:
+The advanced-writer framework features a suite of 17 native MCP tools to handle the narrative engineering lifecycle:
 
-1. **create_narrative**: Builds a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
-2. **develop_character**: Creates, updates, queries, or shadow-matches character profiles in the persistent Jungian Archetypal Database.
-3. **review_narrative**: Runs neurochemical scoring (Cortisol, Oxytocin, Dopamine) and pathology scans on a scene or chapter draft.
-4. **select_structure**: Recommends and outlines the story skeleton (e.g. Truby, Dramatica, Kishōtenketsu, Fichtean Curve) based on a premise and designing principle.
-5. **rewrite_scene**: Performs targeted scene-level improvements with specific adjustments on target neurochemical axes based on critique reports.
-6. **continue_narrative**: Automatically generates the next scene draft in sequence, respecting the timeline, character profiles, and user directives.
-7. **build_world_bible**: Autonomously expands a logline into a World Bible whose FIRST section is **CORE RULES & CONSTRAINTS** (the world's hard logic/limits/costs — canon law that scenes must never violate), followed by Factions, Tech/Magic, Economics, Geography. `create_narrative` now builds this automatically before drafting so world logic stays consistent.
-8. **expand_to_novel**: Outlines a scene-by-scene Beat Sheet and runs an autonomous background drafting loop to write the entire manuscript chapter-by-chapter.
-9. **batch_revise_pathologies**: The "Character Writer's Room." Spawns character personas to critique a failing draft, compiles Character Demands, and rewrites the scenes to honor them.
-10. **storyscope_final_review**: Runs the ultimate structural audit. It dispatches 10 parallel AI specialists to evaluate a compiled manuscript across 10 StoryScope aspect lenses:
-    - _Plot_: Causal flow, subplot integration, temporal progression
-    - _Agents_: Core desires, tragic flaws, agency vs. fate
-    - _Perspective_: Narrative distance, voice consistency
-    - _Temporal Structure_: Nonlinearity, pacing, time jumps
-    - _Setting_: Physical specificity, atmosphere, spatial layout
-    - _Style_: Sentence variety, vocabulary choice, subtext density
-    - _Events_: Narrative beats, inciting incident, climax, resolution
-    - _Revelation_: Information disclosure, mystery, suspense
-    - _Situatedness_: Cultural unmooring, historical references
-    - _Social Networks_: Character relationships, power dynamics
-      Synthesizes these reports into an Executive Summary containing a Draft 2 prioritized action plan.
-11. **apply_storyscope_revisions**: Builds the next draft version (auto-increments v1→v2→v3…, non-destructive) by applying the Executive Summary's REVISE PROSE bucket (informed by the full specialist lens reports) to only the flagged scenes. Every rewrite is reminded of the same craft/anti-pattern directives used at first-draft time, re-checked against the World Bible's hard rules/continuity, and re-scored on the neurochemical/pathology diagnostic — then logged to a persistent changelog. Accepts an optional human-approved/edited `directives` plan (and `exclude_scenes`) so the user's review of the Executive Summary actually reaches the rewrite. Any two versions can be diffed in the Studio UI. Only revises prose — never touches canon.
-12. **reconcile_storyscope_canon**: The other half of the review's to-do list. Applies the Executive Summary's UPDATE CANON bucket: updates the World Bible, Architecture Brief, and character graph metadata so the planning documents catch up to manuscript improvements the review judged as-good-or-better. Backs up the previous World Bible/Architecture Brief before overwriting and logs to the same changelog. Never touches scene text.
-13. **web_search**: Searches the web to retrieve specific names, places, cultural touchstones, and domain terms to inject verisimilitude (combats vague allusions).
+1. **create_narrative**: Build a complete narrative from a logline, premise, or raw idea. Runs an 8-step pipeline: intake -> hamartia -> framework -> characters -> architecture -> draft -> diagnostic.
+2. **develop_character**: Create, update, query, list, or shadow-match characters in the persistent Archetypal Database.
+3. **review_narrative**: Run neurochemical scoring, pathology diagnostics, and agency enforcement on existing text. Produces a structured neuro-critique report.
+4. **select_structure**: Interactively select the right structural framework (Truby, Dramatica, Kishōtenketsu, Fichtean) for a story based on its Designing Principle.
+5. **rewrite_scene**: Targeted scene rewriting with before/after neurochemical scoring. Identifies specific pathologies and produces an improved version.
+6. **continue_narrative**: Continue drafting a story by generating the next scene based on the previous scene, the story architecture, and user direction.
+7. **batch_revise_pathologies**: Scans a story's diagnostics, triggers a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
+8. **build_world_bible**: Expands a premise into a highly detailed World Bible including Factions, Tech/Magic, Economics, and Geography, and saves it to Vector Memory.
+9. **expand_to_novel**: Expands a synopsis into a structured ARC (beat-sheet scaffold seeded into the graph timeline + Chroma), runs a world-model self-consistency check, and optionally auto-drafts the whole manuscript beat by beat with the per-scene continuity gate.
+10. **storyscope_final_review**: Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
+11. **apply_storyscope_revisions**: Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...). The planner assigns each critique issue to EXACTLY ONE operation: 'rewrite' (full-scene revision), 'line_edit' (surgical anchored edits that preserve polished prose), 'cut_scene', 'merge_scenes', or 'add_scene' — so structural fixes the review asks for are actually executable. Every change is (a) checked against the World Bible's hard rules, (b) VERIFIED against its own directive (PASS/FAIL with cited evidence, retried with auditor feedback on FAIL), (c) re-scored on the neurochemical diagnostic, and (d) logged with deterministic diff stats. Ends with a COVERAGE REPORT mapping every critique item -> op -> scene -> verified status (including items it could NOT action, honestly), and updates the persistent cross-version issue ledger. Pass 'directives' to apply a human-approved/edited plan instead of the auto-generated one. This tool only revises PROSE — for canon reconciliation use reconcile_storyscope_canon.
+12. **reconcile_storyscope_canon**: Applies the StoryScope review's CANON RECONCILIATION findings: updates the World Bible, Architecture Brief, and character graph metadata so the planning documents catch up to the manuscript's improvements. Complements apply_storyscope_revisions, which only rewrites prose and deliberately ignores canon divergence — this tool is the other half of the review's to-do list and never touches scene text. Non-destructive: the previous World Bible / Architecture Brief are backed up before being overwritten, and every run appends to a persistent changelog.
+13. **find_replace**: Deterministic find & replace across a story's documents — the literal counterpart to the AI rewrite tools. Renames a term everywhere, fixes a recurring typo, or changes a single word/line, touching ONLY the matched text. Defaults to a safe PREVIEW (apply=false) that reports every match without changing files; set apply=true to write the edits (each touched file is backed up first). Supports literal, whole-word, and regex matching.
+14. **brainstorm_ideas**: Generate a batch of genuinely good, distinct story concepts (logline + genre + tone + hook) for brainstorming — premises with a real emotional core and a fresh angle, the kind that could become a beloved or cult-classic novel, never gimmicks or absurdist mashups. Use when the user wants fresh story ideas, riffs on a seed, or 'more like that' — discussion only; this never starts writing a story.
+15. **publish_story**: Package a finished story for publishing. target='amazon' (default) produces the full Amazon/KDP kit: e-book, cover image, print-ready paperback PDF, a listing sheet (description, keywords, categories), and a plain-language upload walkthrough. target='share' produces just a clean e-book + reading PDF. Non-destructive: writes to the project's publish/ folder. Use when the user wants to publish, sell, export, or ship their finished book.
+16. **check_job**: Check the status/result of a background job started by running a long tool with async=true. Returns running | completed | failed plus the final summary.
+17. **list_jobs**: List recent background jobs (most recent first) with their status.
 
 </automated_mcp_tools>
 
