@@ -307,6 +307,8 @@ export default function Studio() {
   const [copilotHeight, setCopilotHeight] = useState<"normal" | "expanded">(
     "normal",
   );
+  const [revisionPlanOpen, setRevisionPlanOpen] = useState<boolean>(true);
+  const [issueLedgerOpen, setIssueLedgerOpen] = useState<boolean>(true);
 
   // Refs keep the transport body current without re-creating the chat client.
   const activeIdRef = useRef(activeId);
@@ -1140,7 +1142,7 @@ export default function Studio() {
         <Section title="StoryScope" />
         {story.executiveSummary ? (
           <button
-            style={linkBtn}
+            style={{ ...linkBtn, marginBottom: 8 }}
             onClick={() => setSel({ type: "doc", id: "storyscope" })}
           >
             Open Executive Summary →
@@ -1148,6 +1150,432 @@ export default function Studio() {
         ) : (
           <Muted text="No StoryScope review yet. Ask the copilot to run one." />
         )}
+
+        {/* Revision Plan */}
+        <CollapsibleSection
+          title="Revision Plan"
+          open={revisionPlanOpen}
+          onToggle={() => setRevisionPlanOpen(!revisionPlanOpen)}
+        />
+        {revisionPlanOpen && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              marginTop: 4,
+            }}
+          >
+            {story.revisionPlan ? (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    fontSize: "0.72rem",
+                    color: C.dim,
+                  }}
+                >
+                  <span>
+                    Source: <b>{story.revisionPlan.source_version}</b>
+                  </span>
+                  <span>
+                    Ops: <b>{story.revisionPlan.revisions?.length || 0}</b>
+                  </span>
+                  {story.revisionPlan.unactionable?.length > 0 && (
+                    <span style={{ color: "#fbbf24" }}>
+                      Needs Human:{" "}
+                      <b>{story.revisionPlan.unactionable.length}</b>
+                    </span>
+                  )}
+                </div>
+
+                {story.revisionPlan.revisions?.map((rev: any, idx: number) => {
+                  const opColor =
+                    rev.op === "rewrite"
+                      ? "#c084fc"
+                      : rev.op === "line_edit"
+                        ? "#60a5fa"
+                        : rev.op === "cut_scene"
+                          ? "#f87171"
+                          : rev.op === "add_scene"
+                            ? "#34d399"
+                            : "#fbbf24";
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.02)",
+                        border: `1px solid ${C.border}`,
+                        borderLeft: `3px solid ${opColor}`,
+                        borderRadius: 4,
+                        padding: 8,
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "0.62rem",
+                            textTransform: "uppercase",
+                            letterSpacing: 0.5,
+                            fontWeight: 600,
+                            color: opColor,
+                            background: `${opColor}15`,
+                            padding: "2px 5px",
+                            borderRadius: 3,
+                          }}
+                        >
+                          {rev.op?.replace("_", " ")}
+                        </span>
+                        {rev.scene_id && (
+                          <span
+                            style={{
+                              color: C.accent,
+                              fontWeight: 500,
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            {rev.scene_id}
+                          </span>
+                        )}
+                      </div>
+                      {rev.directive && (
+                        <div
+                          style={{
+                            color: C.text,
+                            lineHeight: 1.45,
+                            marginBottom: 2,
+                          }}
+                        >
+                          {rev.directive}
+                        </div>
+                      )}
+                      {rev.specifics && (
+                        <div
+                          style={{
+                            color: C.dim,
+                            fontSize: "0.7rem",
+                            fontStyle: "italic",
+                            borderTop: "1px solid rgba(255,255,255,0.03)",
+                            paddingTop: 4,
+                            marginTop: 4,
+                          }}
+                        >
+                          {rev.specifics}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {story.revisionPlan.unactionable?.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div
+                      style={{
+                        fontSize: "0.68rem",
+                        textTransform: "uppercase",
+                        color: "#fbbf24",
+                        letterSpacing: 0.5,
+                        fontWeight: 600,
+                        marginBottom: 4,
+                      }}
+                    >
+                      ⚠️ Needs Human Judgment
+                    </div>
+                    {story.revisionPlan.unactionable.map(
+                      (un: any, idx: number) => (
+                        <div
+                          key={idx}
+                          style={{
+                            background: "rgba(251, 191, 36, 0.03)",
+                            border: "1px solid rgba(251, 191, 36, 0.15)",
+                            borderRadius: 4,
+                            padding: 6,
+                            fontSize: "0.72rem",
+                            color: C.text,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {un.issue_id && (
+                            <b style={{ color: "#fbbf24" }}>{un.issue_id}: </b>
+                          )}
+                          {un.reason}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Muted text="No revision plan active. Run a StoryScope audit to compile one." />
+            )}
+          </div>
+        )}
+
+        {/* Issue Ledger */}
+        <CollapsibleSection
+          title="Issue Ledger (Burn-Down)"
+          open={issueLedgerOpen}
+          onToggle={() => setIssueLedgerOpen(!issueLedgerOpen)}
+        />
+        {issueLedgerOpen && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              marginTop: 4,
+            }}
+          >
+            {story.issueLedger?.issues?.length > 0 ? (
+              (() => {
+                const issues = story.issueLedger.issues;
+                const open = issues.filter(
+                  (i: any) => i.status === "open",
+                ).length;
+                const addressed = issues.filter(
+                  (i: any) => i.status === "addressed",
+                ).length;
+                const needsHuman = issues.filter(
+                  (i: any) => i.status === "needs-human",
+                ).length;
+                const attempted = issues.filter(
+                  (i: any) => i.status === "attempted",
+                ).length;
+                const total = issues.length;
+
+                return (
+                  <>
+                    <div
+                      style={{
+                        background: "rgba(255, 255, 255, 0.02)",
+                        border: `1px solid ${C.border}`,
+                        borderRadius: 4,
+                        padding: "8px 10px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(4, 1fr)",
+                        gap: 4,
+                        textAlign: "center",
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.58rem",
+                            color: C.dim,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Open
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "1rem",
+                            fontWeight: 700,
+                            color: "#fbbf24",
+                          }}
+                        >
+                          {open}
+                        </div>
+                      </div>
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.58rem",
+                            color: C.dim,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Addressed
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "1rem",
+                            fontWeight: 700,
+                            color: "#34d399",
+                          }}
+                        >
+                          {addressed}
+                        </div>
+                      </div>
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.58rem",
+                            color: C.dim,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Manual
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "1rem",
+                            fontWeight: 700,
+                            color: "#60a5fa",
+                          }}
+                        >
+                          {needsHuman}
+                        </div>
+                      </div>
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.58rem",
+                            color: C.dim,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Total
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "1rem",
+                            fontWeight: 700,
+                            color: "#fff",
+                          }}
+                        >
+                          {total}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress/Burn-down bar */}
+                    <div
+                      style={{
+                        height: 6,
+                        width: "100%",
+                        background: "rgba(255,255,255,0.05)",
+                        borderRadius: 3,
+                        overflow: "hidden",
+                        display: "flex",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${(addressed / total) * 100}%`,
+                          background: "#34d399",
+                        }}
+                        title={`Addressed: ${addressed}`}
+                      />
+                      <div
+                        style={{
+                          width: `${(needsHuman / total) * 100}%`,
+                          background: "#60a5fa",
+                        }}
+                        title={`Needs Human: ${needsHuman}`}
+                      />
+                      <div
+                        style={{
+                          width: `${(attempted / total) * 100}%`,
+                          background: "#c084fc",
+                        }}
+                        title={`Attempted: ${attempted}`}
+                      />
+                      <div
+                        style={{
+                          width: `${(open / total) * 100}%`,
+                          background: "#fbbf24",
+                        }}
+                        title={`Open: ${open}`}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        marginTop: 4,
+                      }}
+                    >
+                      {issues.map((issue: any) => {
+                        const statusColor =
+                          issue.status === "addressed"
+                            ? "#34d399"
+                            : issue.status === "needs-human"
+                              ? "#60a5fa"
+                              : issue.status === "attempted"
+                                ? "#c084fc"
+                                : "#fbbf24";
+                        return (
+                          <div
+                            key={issue.id}
+                            style={{
+                              background: "rgba(255, 255, 255, 0.01)",
+                              border: `1px solid ${C.border}`,
+                              borderRadius: 4,
+                              padding: 8,
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "start",
+                                gap: 6,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color: C.text,
+                                  flex: 1,
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                {issue.title}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.58rem",
+                                  fontWeight: 600,
+                                  textTransform: "uppercase",
+                                  color: statusColor,
+                                  border: `1px solid ${statusColor}35`,
+                                  background: `${statusColor}08`,
+                                  padding: "1px 4px",
+                                  borderRadius: 3,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {issue.status}
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                color: C.dim,
+                                fontSize: "0.64rem",
+                                marginTop: 4,
+                              }}
+                            >
+                              <span>{issue.id}</span>
+                              <span>Flagged in {issue.first_flagged}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()
+            ) : (
+              <Muted text="No issues tracked in the ledger yet." />
+            )}
+          </div>
+        )}
+
         {/* Cast lives in the left sidebar (single source). Select a character
             there to see their detail here. */}
         <Section title="Cast" />
@@ -2166,6 +2594,28 @@ const Section = ({ title }: any) => (
     }}
   >
     {title}
+  </div>
+);
+const CollapsibleSection = ({ title, open, onToggle }: any) => (
+  <div
+    onClick={onToggle}
+    style={{
+      color: C.dim,
+      fontSize: "0.7rem",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      margin: "14px 0 6px",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      cursor: "pointer",
+      userSelect: "none",
+    }}
+  >
+    <span>{title}</span>
+    <span style={{ fontSize: "0.65rem", color: C.accent, fontWeight: "bold" }}>
+      {open ? "▼" : "▶"}
+    </span>
   </div>
 );
 const Muted = ({ text }: any) => (

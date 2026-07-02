@@ -132,6 +132,26 @@ export class WorkspaceExporter {
     return filePath;
   }
 
+  /** Read one scene's saved neuro-critique report (null if none exists). */
+  async readDiagnosticReport(
+    storyName: string,
+    sceneId: string,
+  ): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const sceneSlug = this.sanitizeFilename(sceneId);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "diagnostics",
+      `neuro-critique-${sceneSlug}.md`,
+    );
+    try {
+      return await fs.promises.readFile(filePath, "utf8");
+    } catch {
+      return null;
+    }
+  }
+
   async saveDraft(
     storyName: string,
     sceneId: string,
@@ -467,7 +487,10 @@ export class WorkspaceExporter {
    * it exists; otherwise, for v1 only, fall back to the legacy flat folder so
    * pre-existing reviews remain visible. Returns null when nothing exists.
    */
-  private resolveReportsDir(storySlug: string, version?: string): string | null {
+  private resolveReportsDir(
+    storySlug: string,
+    version?: string,
+  ): string | null {
     const root = path.join(this.baseDir, storySlug, "storyscope-reports");
     if (version) {
       const versioned = path.join(root, version);
@@ -476,9 +499,7 @@ export class WorkspaceExporter {
       if (version === "v1" && fs.existsSync(root)) {
         // Only if the flat folder actually holds report files (not just the
         // version subfolders created later).
-        const hasFlat = fs
-          .readdirSync(root)
-          .some((f) => f.endsWith(".md"));
+        const hasFlat = fs.readdirSync(root).some((f) => f.endsWith(".md"));
         if (hasFlat) return root;
       }
       return fs.existsSync(versioned) ? versioned : null;
@@ -567,7 +588,12 @@ export class WorkspaceExporter {
     content: string,
   ): Promise<string> {
     const storySlug = this.sanitizeFilename(storyName);
-    const dir = path.join(this.baseDir, storySlug, "structure", "canon-backups");
+    const dir = path.join(
+      this.baseDir,
+      storySlug,
+      "structure",
+      "canon-backups",
+    );
     await this.ensureDir(dir);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filePath = path.join(dir, `${docName}.${stamp}.md`);
@@ -640,6 +666,46 @@ export class WorkspaceExporter {
     return filePath;
   }
 
+  /**
+   * The compiled REVISION PLAN for a reviewed version — the concrete, editable
+   * list of operations apply_storyscope_revisions will execute. Written by
+   * storyscope_final_review; readable/editable in the Studio; consumed by apply.
+   */
+  async saveRevisionPlan(
+    storyName: string,
+    version: string | undefined,
+    plan: any,
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = this.storyscopeDir(storySlug, version);
+    await this.ensureDir(dir);
+    const filePath = path.join(dir, "revision-plan.json");
+    await fs.promises.writeFile(
+      filePath,
+      JSON.stringify(plan, null, 2),
+      "utf8",
+    );
+    return filePath;
+  }
+
+  async readRevisionPlan(
+    storyName: string,
+    version?: string,
+  ): Promise<any | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = this.resolveReportsDir(storySlug, version);
+    if (!dir) return null;
+    try {
+      const raw = await fs.promises.readFile(
+        path.join(dir, "revision-plan.json"),
+        "utf8",
+      );
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
   /** Read a version's StoryScope changelog (what apply actually did). */
   async readStoryscopeChangelog(
     storyName: string,
@@ -649,10 +715,7 @@ export class WorkspaceExporter {
     const dir = this.resolveReportsDir(storySlug, version);
     if (!dir) return null;
     try {
-      return await fs.promises.readFile(
-        path.join(dir, "changelog.md"),
-        "utf8",
-      );
+      return await fs.promises.readFile(path.join(dir, "changelog.md"), "utf8");
     } catch {
       return null;
     }

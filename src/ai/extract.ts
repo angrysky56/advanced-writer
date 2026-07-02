@@ -156,6 +156,43 @@ At the very END of your report, output this exact machine-readable block and not
 SCORES: cortisol=<1-10>, oxytocin=<1-10>, dopamine=<1-10>
 PATHOLOGIES: <comma-separated subset of: Somatic Metaphor Cliché, False Protagonist Activity, Flatlining Dopamine, Moralizing Ending, Telling Not Showing, Purple Prose; or the single word none>`;
 
+/** Parsed form of the DIAGNOSTIC_SCORE_BLOCK a neuro-critique report ends with. */
+export interface DiagnosticScores {
+  cortisol: number;
+  oxytocin: number;
+  dopamine: number;
+  pathologies: string[];
+}
+
+/**
+ * Parse the machine-readable SCORES/PATHOLOGIES block from a saved
+ * neuro-critique report. Returns null when the block is absent — older reports
+ * predate it. This is what lets the pipeline actually READ its own diagnostics
+ * instead of writing them and never looking again.
+ */
+export function parseDiagnosticBlock(report: string): DiagnosticScores | null {
+  if (!report) return null;
+  const scoreMatch = report.match(
+    /SCORES:\s*cortisol\s*=\s*(\d+)\s*,\s*oxytocin\s*=\s*(\d+)\s*,\s*dopamine\s*=\s*(\d+)/i,
+  );
+  if (!scoreMatch) return null;
+  const pathMatch = report.match(/PATHOLOGIES:\s*([^\n]+)/i);
+  const rawPath = pathMatch ? pathMatch[1].trim() : "none";
+  const pathologies =
+    /^none\b/i.test(rawPath) || !rawPath
+      ? []
+      : rawPath
+          .split(",")
+          .map((p) => p.trim())
+          .filter(Boolean);
+  return {
+    cortisol: clampScore(scoreMatch[1]),
+    oxytocin: clampScore(scoreMatch[2]),
+    dopamine: clampScore(scoreMatch[3]),
+    pathologies,
+  };
+}
+
 export interface CharacterMeta {
   name: string;
   archetype: string;

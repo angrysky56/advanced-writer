@@ -393,6 +393,39 @@ async function getWorkspaceData(version: string = "v1") {
         manuscript = await fs.promises.readFile(manuscriptPath, "utf8");
       }
 
+      // 8. Read revision-plan.json
+      let revisionPlan = null;
+      const revisionPlanPath = path.join(
+        storyPath,
+        "storyscope-reports",
+        version,
+        "revision-plan.json",
+      );
+      if (fs.existsSync(revisionPlanPath)) {
+        try {
+          const raw = await fs.promises.readFile(revisionPlanPath, "utf8");
+          revisionPlan = JSON.parse(raw);
+        } catch (e) {
+          console.warn("Failed to parse revision-plan.json:", e);
+        }
+      }
+
+      // 9. Read issue-ledger.json
+      let issueLedger = null;
+      const issueLedgerPath = path.join(
+        storyPath,
+        "storyscope-reports",
+        "issue-ledger.json",
+      );
+      if (fs.existsSync(issueLedgerPath)) {
+        try {
+          const raw = await fs.promises.readFile(issueLedgerPath, "utf8");
+          issueLedger = JSON.parse(raw);
+        } catch (e) {
+          console.warn("Failed to parse issue-ledger.json:", e);
+        }
+      }
+
       stories.push({
         id: dirName,
         name: storyName,
@@ -406,6 +439,8 @@ async function getWorkspaceData(version: string = "v1") {
         aspectReports,
         executiveSummary,
         manuscript,
+        revisionPlan,
+        issueLedger,
         // Relative file paths (under the workspace base dir) for hand editing.
         architecturePath: path.join(
           dirName,
@@ -443,17 +478,28 @@ export async function POST(req: Request) {
 
     if (action === "createProject") {
       if (!projectName) {
-        return NextResponse.json({ error: "Project name is required." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Project name is required." },
+          { status: 400 },
+        );
       }
       const baseDir = getWorkspaceDir();
       const folderName = projectName.trim().replace(/\s+/g, "_").toLowerCase();
       const newProjectPath = path.join(baseDir, folderName);
       if (!fs.existsSync(newProjectPath)) {
         await fs.promises.mkdir(newProjectPath, { recursive: true });
-        await fs.promises.mkdir(path.join(newProjectPath, "characters"), { recursive: true });
-        await fs.promises.mkdir(path.join(newProjectPath, "structure"), { recursive: true });
-        await fs.promises.mkdir(path.join(newProjectPath, "drafts", "v1"), { recursive: true });
-        await fs.promises.mkdir(path.join(newProjectPath, "diagnostics"), { recursive: true });
+        await fs.promises.mkdir(path.join(newProjectPath, "characters"), {
+          recursive: true,
+        });
+        await fs.promises.mkdir(path.join(newProjectPath, "structure"), {
+          recursive: true,
+        });
+        await fs.promises.mkdir(path.join(newProjectPath, "drafts", "v1"), {
+          recursive: true,
+        });
+        await fs.promises.mkdir(path.join(newProjectPath, "diagnostics"), {
+          recursive: true,
+        });
       }
       return getWorkspaceData("v1");
     }

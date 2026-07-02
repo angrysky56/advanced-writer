@@ -9,14 +9,16 @@ import {
   verifyDirective,
   applyAnchoredEdits,
   issueSlug,
+  diagnosticDelta,
   type AnchoredEdit,
   type VerifyResult,
 } from "./_revision-support.js";
+import { buildAndSaveRevisionPlan } from "./_revision-planner.js";
 
 export const applyStoryscopeRevisionsDef = {
   name: "apply_storyscope_revisions",
   description:
-    "Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...). The planner assigns each critique issue to EXACTLY ONE operation: 'rewrite' (full-scene revision), 'line_edit' (surgical anchored edits that preserve polished prose), 'cut_scene', 'merge_scenes', or 'add_scene' — so structural fixes the review asks for are actually executable. Every change is (a) checked against the World Bible's hard rules, (b) VERIFIED against its own directive (PASS/FAIL with cited evidence, retried with auditor feedback on FAIL), (c) re-scored on the neurochemical diagnostic, and (d) logged with deterministic diff stats. Ends with a COVERAGE REPORT mapping every critique item -> op -> scene -> verified status (including items it could NOT action, honestly), and updates the persistent cross-version issue ledger. Pass 'directives' to apply a human-approved/edited plan instead of the auto-generated one. This tool only revises PROSE — for canon reconciliation use reconcile_storyscope_canon.",
+    "Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...); re-running when the latest version has no review of its own REBUILDS that version from its predecessor (rerun/resume — the predecessor is never touched). The planner assigns each critique issue to EXACTLY ONE operation: 'rewrite', 'line_edit' (surgical anchored edits), 'global_line_edit' (manuscript-wide line pass), 'cut_scene', 'merge_scenes', or 'add_scene'. Every change is (a) checked against the World Bible's hard rules (unresolved contradictions are surfaced loudly and ledgered), (b) VERIFIED against its own directive (PASS/FAIL with cited evidence, retried with auditor feedback), (c) guarded against unrequested prose loss (a rewrite that sheds more words than its directive authorizes is REVERTED), (d) scored for neurochemical/pathology deltas (before->after), and (e) logged with deterministic diff stats. Ends with a COVERAGE REPORT mapping every critique item -> op -> scene -> verified status (including items it could NOT action, honestly), and updates the persistent cross-version issue ledger. Executes the saved plan from storyscope-reports/<version>/revision-plan.json (compiled by storyscope_final_review; user-editable in the Studio) when present; auto-plans otherwise; 'directives' overrides both. This tool only revises PROSE — for canon reconciliation use reconcile_storyscope_canon.",
   inputSchema: {
     type: "object",
     properties: {
@@ -43,12 +45,18 @@ export const applyStoryscopeRevisionsDef = {
               enum: [
                 "rewrite",
                 "line_edit",
+                "global_line_edit",
                 "cut_scene",
                 "merge_scenes",
                 "add_scene",
               ],
               description:
-                "Operation type (default 'rewrite'). 'line_edit' = surgical anchored edits; 'cut_scene' = remove this scene; 'merge_scenes' = fuse scene_id with merge_with; 'add_scene' = new scene after after_scene.",
+                "Operation type (default 'rewrite'). 'line_edit' = surgical anchored edits; 'global_line_edit' = the same surgical directive applied across every scene (scene_id: 'all') for manuscript-wide passes like tense drag or stylistic crutches; 'cut_scene' = remove this scene; 'merge_scenes' = fuse scene_id with merge_with; 'add_scene' = new scene after after_scene.",
+            },
+            specifics: {
+              type: "string",
+              description:
+                "Verbatim excerpts from the specialist lens reports (actors_table DEMANDs, style citations) the executor must honor — carries the depth of the fix.",
             },
             merge_with: {
               type: "string",
@@ -84,7 +92,13 @@ export const applyStoryscopeRevisionsDef = {
   },
 };
 
-type Op = "rewrite" | "line_edit" | "cut_scene" | "merge_scenes" | "add_scene";
+type Op =
+  | "rewrite"
+  | "line_edit"
+  | "cut_scene"
+  | "merge_scenes"
+  | "add_scene"
+  | "global_line_edit";
 
 interface PlanItem {
   issueId: string;
@@ -93,6 +107,11 @@ interface PlanItem {
   mergeWith?: string;
   afterScene?: string;
   directive: string;
+  /** Verbatim excerpts from the specialist lens reports (actors_table DEMANDs,
+   *  style citations, etc.) that the executor must honor — without this, deep
+   *  lens feedback gets flattened into a one-sentence directive and edits go
+   *  shallow. */
+  specifics?: string;
 }
 
 interface CoverageRow {
@@ -109,7 +128,13 @@ const VALID_OPS: Op[] = [
   "cut_scene",
   "merge_scenes",
   "add_scene",
+  "global_line_edit",
 ];
+
+/** Directive language that legitimizes large deletions. Without it, a rewrite
+ *  that sheds >30% of the scene's words is treated as unrequested shrinkage. */
+const CUT_INTENT =
+  /(cut|trim|reduce|compress|condense|shorten|prune|delete|remove|merge|tighten|by \d+\s*%)/i;
 
 const MAX_GEN_ATTEMPTS = 3; // transport-level retries per AI call
 const MAX_VERIFY_ROUNDS = 2; // directive-verification retry loop
@@ -160,22 +185,56 @@ export async function executeApplyStoryscopeRevisions(args: any) {
           ...versions.map((v) => parseInt(v.replace(/\D/g, ""), 10) || 1),
         )
       : 1;
-    const source_version =
+    let source_version =
       args.source_version || (versions.length ? `v${latestNum}` : "v1");
-    const target_version = args.target_version || `v${latestNum + 1}`;
+    let target_version = args.target_version || `v${latestNum + 1}`;
 
     // 1. Read Executive Summary AND the full specialist lens reports for the
     // SOURCE version — the reviser must work from the critique of the exact
     // draft it is revising.
-    const executiveSummary =
+    let executiveSummary =
       await workspaceExporter.readStoryscopeExecutiveSummary(
         story_id,
         source_version,
       );
-    const lensReports = await workspaceExporter.readAllStoryscopeReports(
+    let lensReports = await workspaceExporter.readAllStoryscopeReports(
       story_id,
       source_version,
     );
+    let hasReview =
+      !!(executiveSummary && executiveSummary.trim()) || lensReports.length > 0;
+
+    // RERUN / RESUME: if the LATEST version has no review of its own but the
+    // version before it does, this run is either (a) resuming an apply that
+    // aborted partway, or (b) deliberately re-running the same review. In both
+    // cases the correct behavior is the same: REBUILD the latest version from
+    // its predecessor using the predecessor's review — never silently error,
+    // and never touch the predecessor. (Only in auto mode; explicit
+    // source/target args are always honored as given.)
+    let rerunNote = "";
+    if (
+      !hasReview &&
+      !args.source_version &&
+      !args.target_version &&
+      latestNum > 1
+    ) {
+      const prev = `v${latestNum - 1}`;
+      const prevSummary =
+        await workspaceExporter.readStoryscopeExecutiveSummary(story_id, prev);
+      const prevLens = await workspaceExporter.readAllStoryscopeReports(
+        story_id,
+        prev,
+      );
+      if ((prevSummary && prevSummary.trim()) || prevLens.length > 0) {
+        source_version = prev;
+        target_version = `v${latestNum}`;
+        executiveSummary = prevSummary;
+        lensReports = prevLens;
+        hasReview = true;
+        rerunNote = `NOTE: ${target_version} had no review of its own, so this run REBUILT ${target_version} from ${source_version} using ${source_version}'s review (rerun/resume semantics — ${source_version} untouched, ${target_version} overwritten).\n\n`;
+      }
+    }
+
     const lensContext =
       lensReports.length > 0
         ? lensReports
@@ -183,8 +242,6 @@ export async function executeApplyStoryscopeRevisions(args: any) {
             .join("\n\n")
         : "(no specialist lens reports found)";
 
-    const hasReview =
-      !!(executiveSummary && executiveSummary.trim()) || lensReports.length > 0;
     if (!hasReview) {
       return {
         content: [
@@ -225,41 +282,13 @@ export async function executeApplyStoryscopeRevisions(args: any) {
     }
     const sceneSet = new Set(sceneIds);
 
-    // 3. Collect short opening excerpts for the planner (no copying yet — the
-    // copy-forward must happen AFTER planning so cut scenes are never copied).
-    const excerpts: { sceneId: string; excerpt: string }[] = [];
-    for (const sceneId of sceneIds) {
-      let text = await workspaceExporter.readDraft(
-        story_id,
-        sceneId,
-        source_version,
-      );
-      if (!text)
-        text = await workspaceExporter.readDraft(story_id, sceneId, "v1");
-      if (!text) continue;
-      excerpts.push({
-        sceneId,
-        excerpt: text.slice(0, 400).replace(/\s+/g, " ").trim(),
-      });
-    }
-    if (excerpts.length === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: no scenes available to revise for ${story_id}.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    // 4. PLAN: human-approved directives, or one auto-planning call. Each
-    // critique issue gets EXACTLY ONE owning operation — assigning the same fix
-    // to two scenes manufactures the repetition the next review then flags.
+    // 3+4. PLAN: precedence is (a) human-approved 'directives', (b) the saved
+    // revision-plan.json compiled at the end of storyscope_final_review — the
+    // artifact the user reads/edits in the Studio, so what they saw is exactly
+    // what runs — (c) fallback: build (and save) a fresh plan now.
     const coverage: CoverageRow[] = [];
     let rawItems: any[] = [];
-    let planSource: "human-approved" | "auto" = "auto";
+    let planSource: "human-approved" | "saved-plan" | "auto" = "auto";
 
     const providedDirectives = Array.isArray(args.directives)
       ? args.directives
@@ -269,44 +298,16 @@ export async function executeApplyStoryscopeRevisions(args: any) {
       planSource = "human-approved";
       rawItems = providedDirectives;
     } else {
-      const planPrompt = `You are an editorial planner. The AUTHOR'S INTENT IS PRIMARY and the manuscript is the living work; the Architecture Brief / World Bible are only earlier planning drafts. Flag work ONLY for genuine CRAFT problems — the story contradicting ITSELF, an arc that doesn't pay off, pacing/clarity failures, weak execution. DO NOT flag a scene merely because it diverges from the planning documents (canon updates belong to reconcile_storyscope_canon, not here).
-
-You have FIVE operations. Choose the one that actually executes each critique item:
-- "rewrite": full-scene revision — for pacing, structure, POV, or emotional-beat problems within ONE scene.
-- "line_edit": surgical anchored edits — for LOCAL fixes (a factual/continuity error, an over-repeated description, an explanatory sentence to cut). STRONGLY PREFER this when the fix is local: it preserves polished prose by construction.
-- "cut_scene": remove a scene the critique identifies as redundant (scene_id = the scene to cut).
-- "merge_scenes": fuse two scenes into one (scene_id = the surviving scene, merge_with = the scene absorbed into it).
-- "add_scene": a genuinely NEW scene the critique calls for (after_scene = the scene it follows; scene_id may repeat after_scene).
-
-HARD RULES:
-1. Each critique issue is owned by EXACTLY ONE operation. NEVER assign the same fix to two scenes — duplicated fixes create the repetition the next review will flag.
-2. Give every item a short stable kebab-case "issue_id" naming the underlying issue (e.g. "takehiko-closure").
-3. Scenes that already work must NOT be touched.
-4. If an issue cannot be executed by any of these operations (needs human judgment, or is too ambiguous), list it under "unactionable" with the reason — NEVER pretend by assigning a token rewrite.
-
-Output ONLY JSON:
-{ "revisions": [ { "issue_id": "...", "op": "rewrite|line_edit|cut_scene|merge_scenes|add_scene", "scene_id": "scene_3", "merge_with": "(merge only)", "after_scene": "(add only)", "directive": "the specific change" } ],
-  "unactionable": [ { "issue_id": "...", "reason": "..." } ] }
-
-=== EXECUTIVE SUMMARY ===
-${summaryContext}
-
-=== SPECIALIST LENS REPORTS ===
-${lensContext}
-
-=== SCENES (id :: opening excerpt) ===
-${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
-
-      let plan: any = null;
-      try {
-        const planResp = await aiRouter.generateCompletion({
-          taskType: "diagnostic",
-          systemPrompt: planPrompt,
-          userMessage: "Output the revision plan as JSON.",
-        });
-        plan = safeParseJson<any>(planResp);
-      } catch {
-        plan = null;
+      // (b) Saved plan from the review — the file the Studio shows and the
+      // user may have edited. (c) Fallback: compile one now (also saves it).
+      let plan: any = await workspaceExporter.readRevisionPlan(
+        story_id,
+        source_version,
+      );
+      if (plan && Array.isArray(plan.revisions)) {
+        planSource = "saved-plan";
+      } else {
+        plan = await buildAndSaveRevisionPlan(story_id, source_version);
       }
       if (plan && Array.isArray(plan.revisions)) rawItems = plan.revisions;
       if (plan && Array.isArray(plan.unactionable)) {
@@ -340,6 +341,20 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
       let op: Op = VALID_OPS.includes(r.op) ? r.op : "rewrite";
       let mergeWith = r.merge_with ? String(r.merge_with) : undefined;
       let afterScene = r.after_scene ? String(r.after_scene) : undefined;
+      const specifics = r.specifics
+        ? String(r.specifics).slice(0, 4000)
+        : undefined;
+
+      if (op === "global_line_edit") {
+        items.push({
+          issueId,
+          op,
+          sceneId: "all",
+          directive,
+          specifics,
+        });
+        continue;
+      }
 
       if (excludeSet.has(sceneId)) {
         coverage.push({
@@ -355,8 +370,9 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
       // Validate references against the actual scene set.
       if (op === "add_scene") {
         if (!afterScene || !sceneSet.has(afterScene)) {
-          afterScene =
-            sceneSet.has(sceneId) ? sceneId : sceneIds[sceneIds.length - 1];
+          afterScene = sceneSet.has(sceneId)
+            ? sceneId
+            : sceneIds[sceneIds.length - 1];
         }
       } else if (!sceneSet.has(sceneId)) {
         coverage.push({
@@ -380,7 +396,15 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
         mergeWith = undefined;
       }
 
-      items.push({ issueId, op, sceneId, mergeWith, afterScene, directive });
+      items.push({
+        issueId,
+        op,
+        sceneId,
+        mergeWith,
+        afterScene,
+        directive,
+        specifics,
+      });
     }
 
     // 4c. Resolve collisions: a cut wins over other ops on the same scene;
@@ -408,14 +432,37 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
       if (item.op === "rewrite" || item.op === "line_edit") {
         const existing = bySceneRewrite.get(item.sceneId);
         if (existing) {
-          existing.op = "rewrite"; // combined directives ⇒ full revision
+          // Combine directives on the same scene. CRITICAL: two line_edits stay
+          // a line_edit — escalating combined small fixes to a full rewrite is
+          // how v14's scene_16 lost ~3,000 words from a two-sentence directive.
+          if (item.op === "rewrite") existing.op = "rewrite";
           existing.directive += `\n\nADDITIONALLY (${item.issueId}): ${item.directive}`;
+          if (item.specifics)
+            existing.specifics =
+              `${existing.specifics || ""}\n\n${item.specifics}`.trim();
           existing.issueId += `+${item.issueId}`;
           continue;
         }
         bySceneRewrite.set(item.sceneId, item);
       }
       finalItems.push(item);
+    }
+
+    // Rebuilding an existing target version (rerun/resume): clear its old
+    // drafts first, so scenes created by the previous attempt (e.g. an added
+    // scene the new plan doesn't recreate) can't linger and compile into the
+    // manuscript as orphans.
+    if (rerunNote) {
+      const stale = await workspaceExporter.listDrafts(
+        story_id,
+        target_version,
+      );
+      for (const f of stale)
+        await workspaceExporter.deleteDraft(
+          story_id,
+          f.replace(".md", ""),
+          target_version,
+        );
     }
 
     // 5. COPY every surviving scene forward (cuts simply aren't copied — the
@@ -473,7 +520,7 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
         content: [
           {
             type: "text",
-            text: `${target_version} created from ${source_version} (${copiedIds.length} scenes carried forward). The planner flagged NO scenes as needing revision, so nothing was rewritten.${coverage.length ? `\n\nUnactioned items:\n${coverage.map((c) => `- [${c.issueId}] ${c.status}: ${c.detail}`).join("\n")}` : ""} If you expected changes, re-run storyscope_final_review or tell me which scenes to target.`,
+            text: `${rerunNote}${target_version} created from ${source_version} (${copiedIds.length} scenes carried forward). The planner flagged NO scenes as needing revision, so nothing was rewritten.${coverage.length ? `\n\nUnactioned items:\n${coverage.map((c) => `- [${c.issueId}] ${c.status}: ${c.detail}`).join("\n")}` : ""} If you expected changes, re-run storyscope_final_review or tell me which scenes to target.`,
           },
         ],
       };
@@ -484,6 +531,16 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
     const craftDirectives = loadCraftDirectives();
     const changelogLines: string[] = [];
     let revisedCount = 0;
+
+    // Unresolved consistency-gate contradictions must be LOUD: v14 shipped a
+    // known timeline contradiction in scene_11 because the gate's "still flags"
+    // note was buried in the changelog. Collected here, surfaced in the final
+    // report, and written to the ledger so the next round targets them.
+    const gateFailures: { scene: string; note: string }[] = [];
+    const trackGate = (scene: string, gateNote: string) => {
+      if (gateNote && gateNote.includes("still flags"))
+        gateFailures.push({ scene, note: gateNote });
+    };
 
     const currentIds = () =>
       copiedIds
@@ -528,7 +585,10 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
       directive: string,
     ): Promise<{ text: string; note: string }> => {
       if (!worldBible.trim())
-        return { text, note: "consistency gate: skipped (no World Bible on file)" };
+        return {
+          text,
+          note: "consistency gate: skipped (no World Bible on file)",
+        };
       try {
         const g = await enforceSceneConsistency({
           sceneText: text,
@@ -546,6 +606,13 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
 
     const rescore = async (sceneId: string, text: string): Promise<string> => {
       try {
+        // Read the PREVIOUS report first so the changelog records a measurable
+        // delta (scores moved, pathologies cleared/persisting) instead of the
+        // fact-free line "re-scored".
+        const previous = await workspaceExporter.readDiagnosticReport(
+          story_id,
+          sceneId,
+        );
         const out = await aiRouter.generateCompletion({
           taskType: "diagnostic",
           systemPrompt: `Analyze the following revised scene for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\nScene:\n${text}${DIAGNOSTIC_SCORE_BLOCK}`,
@@ -553,7 +620,7 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
         });
         if (out && out.trim()) {
           await workspaceExporter.saveDiagnosticReport(story_id, sceneId, out);
-          return "diagnostic: re-scored";
+          return diagnosticDelta(previous, out);
         }
         return "diagnostic: re-score returned empty (non-fatal)";
       } catch {
@@ -561,22 +628,32 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
       }
     };
 
-    /** Generate → gate → VERIFY (retry with auditor feedback on FAIL). */
+    /** Generate → gate → SHRINK GUARD → VERIFY (retry with auditor feedback on
+     *  FAIL). The shrink guard is deterministic: a rewrite that sheds more of
+     *  the scene's words than the directive authorizes is a FAIL before any AI
+     *  verifier runs — this is what protects 4,000 words of polished prose from
+     *  a two-sentence directive. */
     const generateVerified = async (opts: {
       opLabel: string;
       directive: string;
       oldText: string; // "" for add_scene
       buildSystemPrompt: (feedback: string) => string;
       userMessage: string;
+      maxLossPct?: number; // undefined = no shrink guard (add_scene)
     }): Promise<{
       text: string;
       gateNote: string;
       verify: VerifyResult;
+      shrinkViolation: boolean;
       error: string;
     }> => {
       let feedback = "";
-      let last: { text: string; gateNote: string; verify: VerifyResult } | null =
-        null;
+      let last: {
+        text: string;
+        gateNote: string;
+        verify: VerifyResult;
+        shrinkViolation: boolean;
+      } | null = null;
       for (let round = 1; round <= MAX_VERIFY_ROUNDS; round++) {
         const gen = await genWithRetries(
           opts.buildSystemPrompt(feedback),
@@ -592,17 +669,39 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
               evidence: "",
               remaining: "",
             },
+            shrinkViolation: false,
             error: gen.error,
           };
         }
         const gated = await runGate(gen.text, opts.directive);
-        const verify = await verifyDirective({
-          directive: opts.directive,
-          oldText: opts.oldText || "(no prior text — this is a new scene)",
-          newText: gated.text,
-          opLabel: opts.opLabel,
-        });
-        last = { text: gated.text, gateNote: gated.note, verify };
+
+        let verify: VerifyResult;
+        let shrinkViolation = false;
+        const d = lineDiffStats(opts.oldText || "", gated.text);
+        const loss = d.oldWords > 0 ? 1 - d.newWords / d.oldWords : 0;
+        if (opts.maxLossPct !== undefined && loss > opts.maxLossPct) {
+          shrinkViolation = true;
+          verify = {
+            verdict: "FAIL",
+            evidence: `unrequested shrinkage: ${d.oldWords} -> ${d.newWords} words (-${Math.round(loss * 100)}%), beyond what the directive authorizes`,
+            remaining:
+              "Restore ALL prose the directive does not explicitly target. Apply the directive as a targeted change to this scene, not a compression or regeneration of it.",
+          };
+        } else {
+          verify = await verifyDirective({
+            directive: opts.directive,
+            oldText: opts.oldText || "(no prior text — this is a new scene)",
+            newText: gated.text,
+            opLabel: opts.opLabel,
+          });
+        }
+
+        last = {
+          text: gated.text,
+          gateNote: gated.note,
+          verify,
+          shrinkViolation,
+        };
         if (verify.verdict !== "FAIL") break;
         feedback = `\n\n=== PREVIOUS ATTEMPT FAILED VERIFICATION ===\nAn independent auditor compared your last attempt against the directive and found it was NOT accomplished.\nAuditor's evidence: ${verify.evidence}\nStill required: ${verify.remaining}\nRedo the work so the directive is unambiguously accomplished this time.`;
       }
@@ -655,10 +754,11 @@ ${changelogLines.length ? changelogLines.join("\n") : "- No scenes were revised 
     };
 
     // Deterministic execution order: line_edits & rewrites & merges in scene
-    // order, then adds (they need their neighbors' final text).
+    // order, then adds (they need their neighbors' final text), then global
+    // line passes (so they also cover freshly added/merged scenes).
     const ordered = [
       ...contentItems
-        .filter((i) => i.op !== "add_scene")
+        .filter((i) => i.op !== "add_scene" && i.op !== "global_line_edit")
         .sort((a, b) =>
           a.sceneId.localeCompare(b.sceneId, undefined, {
             numeric: true,
@@ -666,6 +766,7 @@ ${changelogLines.length ? changelogLines.join("\n") : "- No scenes were revised 
           }),
         ),
       ...contentItems.filter((i) => i.op === "add_scene"),
+      ...contentItems.filter((i) => i.op === "global_line_edit"),
     ];
 
     for (const item of ordered) {
@@ -675,6 +776,78 @@ ${changelogLines.length ? changelogLines.join("\n") : "- No scenes were revised 
           `- **[${item.issueId}]** cut_scene ${item.sceneId}: ${item.directive}\n  - scene not carried into ${target_version} (recoverable from ${source_version})`,
         );
         revisedCount++;
+        continue;
+      }
+
+      /* ---------------- global_line_edit ------------------------------ */
+      // The same surgical directive applied across every scene — this is what
+      // makes manuscript-wide passes (tense drag, over-explication, stylistic
+      // crutches) ACTIONABLE instead of "needs a human pass". Scenes with no
+      // matching material are untouched; each touched scene is gated and its
+      // diff logged. Deterministic edit counts stand in for the AI verifier.
+      if (item.op === "global_line_edit") {
+        const touched: string[] = [];
+        let totalApplied = 0;
+        for (const sid of currentIds()) {
+          if (excludeSet.has(sid)) continue;
+          const text = await workspaceExporter.readDraft(
+            story_id,
+            sid,
+            target_version,
+          );
+          if (!text) continue;
+
+          let edits: AnchoredEdit[] = [];
+          try {
+            const resp = await aiRouter.generateCompletion({
+              taskType: "diagnostic",
+              systemPrompt: `You are a surgical line editor performing ONE manuscript-wide pass. Apply the directive below to THIS scene via the smallest possible set of anchored edits. "find" must be an EXACT contiguous excerpt copied verbatim from the scene (long enough to be unique — full sentences); "replace" is its replacement ("" to delete). If this scene contains NOTHING the directive targets, output {"edits": []}. Do not invent problems. Output ONLY JSON:
+{ "edits": [ { "find": "exact text from the scene", "replace": "replacement text" } ] }
+
+=== GLOBAL DIRECTIVE ===
+${item.directive}${item.specifics ? `\n\n=== SPECIALIST NOTES (verbatim from the lens reports) ===\n${item.specifics}` : ""}
+
+=== SCENE (${sid}) ===
+${text}`,
+              userMessage: "Output the anchored edits for this scene as JSON.",
+            });
+            const parsed = safeParseJson<any>(resp);
+            if (parsed && Array.isArray(parsed.edits)) edits = parsed.edits;
+          } catch {
+            edits = [];
+          }
+          if (edits.length === 0) continue;
+
+          const applied = applyAnchoredEdits(text, edits);
+          if (applied.applied === 0) continue;
+          const gated = await runGate(applied.text, item.directive);
+          await workspaceExporter.saveDraft(
+            story_id,
+            sid,
+            gated.text,
+            target_version,
+          );
+          const d = lineDiffStats(text, gated.text);
+          touched.push(
+            `${sid}: ${applied.applied} edit(s)${applied.failed.length ? ` (+${applied.failed.length} anchor-miss)` : ""}, ${formatDiffStats(d)}`,
+          );
+          totalApplied += applied.applied;
+        }
+
+        const ok = totalApplied > 0;
+        if (ok) revisedCount++;
+        changelogLines.push(
+          `- **[${item.issueId}]** global_line_edit (all scenes): ${item.directive}\n${touched.length ? touched.map((t) => `  - ${t}`).join("\n") : "  - no matching material found in any scene"}`,
+        );
+        coverage.push({
+          issueId: item.issueId,
+          op: "global_line_edit",
+          scene: ok ? `${touched.length} scene(s)` : "all",
+          status: ok ? "done" : "failed",
+          detail: ok
+            ? `${totalApplied} anchored edit(s) across ${touched.length} scene(s)`
+            : "no anchors matched in any scene — directive may be too abstract for line edits",
+        });
         continue;
       }
 
@@ -706,7 +879,7 @@ ${changelogLines.length ? changelogLines.join("\n") : "- No scenes were revised 
             `You are a brilliant MFA-level novelist writing ONE NEW scene that the editorial review requires. It sits between two existing scenes; it must flow seamlessly from the one before and into the one after, in the manuscript's established voice. Output the full scene prose only.
 
 === WHY THIS SCENE MUST EXIST (the directive) ===
-${item.directive}
+${item.directive}${item.specifics ? `\n\n=== SPECIALIST NOTES (verbatim from the lens reports — honor these specifics) ===\n${item.specifics}` : ""}
 
 === OVERALL CRITIQUE (context) ===
 ${summaryContext}
@@ -731,6 +904,7 @@ ${craftDirectives}${feedback}`,
         );
         copiedIds.push(freshId);
         revisedCount++;
+        trackGate(freshId, result.gateNote);
         const diag = await rescore(freshId, result.text);
         const d = lineDiffStats("", result.text);
         changelogLines.push(
@@ -774,11 +948,12 @@ ${craftDirectives}${feedback}`,
           opLabel: "merge_scenes",
           directive: item.directive,
           oldText: oldCombined,
+          maxLossPct: 0.85,
           buildSystemPrompt: (feedback) =>
             `You are a brilliant MFA-level editor FUSING two scenes into ONE stronger scene, per the directive. Preserve the best prose of both; eliminate the redundancy the critique identified; the result must read as a single continuous scene. Output the full merged scene prose only.
 
 === MERGE DIRECTIVE ===
-${item.directive}
+${item.directive}${item.specifics ? `\n\n=== SPECIALIST NOTES (verbatim from the lens reports — honor these specifics) ===\n${item.specifics}` : ""}
 
 === OVERALL CRITIQUE (context) ===
 ${summaryContext}
@@ -789,6 +964,44 @@ ${craftDirectives}${feedback}`,
         });
         if (!result.text) return await abortRun(item.sceneId, result.error);
 
+        if (result.shrinkViolation) {
+          // Merge destroyed too much prose: RESTORE both scenes and fail the
+          // item honestly rather than shipping a gutted fusion.
+          await workspaceExporter.saveDraft(
+            story_id,
+            item.sceneId,
+            primaryText,
+            target_version,
+          );
+          if (secondaryText) {
+            await workspaceExporter.saveDraft(
+              story_id,
+              item.mergeWith!,
+              secondaryText,
+              target_version,
+            );
+            copiedIds.push(item.mergeWith!);
+          }
+          const absorbedRow = coverage.find(
+            (c) => c.scene === item.mergeWith && c.op === "merge (absorbed)",
+          );
+          if (absorbedRow) {
+            absorbedRow.status = "restored";
+            absorbedRow.detail = "merge reverted; scene restored intact";
+          }
+          changelogLines.push(
+            `- **[${item.issueId}]** merge_scenes ${item.sceneId} <- ${item.mergeWith}: ${item.directive}\n  - REVERTED: ${result.verify.evidence}; both original scenes preserved`,
+          );
+          coverage.push({
+            issueId: item.issueId,
+            op: "merge_scenes",
+            scene: `${item.sceneId}<-${item.mergeWith}`,
+            status: "failed",
+            detail: `reverted — ${result.verify.evidence}`,
+          });
+          continue;
+        }
+
         await workspaceExporter.saveDraft(
           story_id,
           item.sceneId,
@@ -796,6 +1009,7 @@ ${craftDirectives}${feedback}`,
           target_version,
         );
         revisedCount++;
+        trackGate(item.sceneId, result.gateNote);
         const diag = await rescore(item.sceneId, result.text);
         const d = lineDiffStats(oldCombined, result.text);
         changelogLines.push(
@@ -839,7 +1053,7 @@ ${craftDirectives}${feedback}`,
 { "edits": [ { "find": "exact text from the scene", "replace": "replacement text" } ] }
 
 === DIRECTIVE ===
-${item.directive}
+${item.directive}${item.specifics ? `\n\n=== SPECIALIST NOTES (verbatim from the lens reports — honor these specifics, they are the depth of the fix) ===\n${item.specifics}` : ""}
 
 === SCENE ===
 ${sceneText}`;
@@ -889,11 +1103,12 @@ ${sceneText}`;
           opLabel: "rewrite",
           directive: item.directive,
           oldText: sceneText,
+          maxLossPct: CUT_INTENT.test(item.directive) ? 0.85 : 0.3,
           buildSystemPrompt: (feedback) =>
-            `You are a brilliant MFA-level editor revising ONE scene for the next draft. Apply the specific directive below, informed by the overall critique. Rewrite the entire scene from start to finish; output the full revised prose only. PRESERVE everything the directive does not require changing — this scene has survived multiple editorial rounds and its unflagged prose is presumed GOOD. CRITICAL: do not "correct" intentional stylistic choices, character voice quirks, or technical terms.
+            `You are a brilliant MFA-level editor revising ONE scene for the next draft. Apply the specific directive below, informed by the overall critique. Rewrite the entire scene from start to finish; output the full revised prose only. PRESERVE everything the directive does not require changing — this scene has survived multiple editorial rounds and its unflagged prose is presumed GOOD; reproduce it. CRITICAL: do not "correct" intentional stylistic choices, character voice quirks, or technical terms, and do not compress or drop passages the directive doesn't target.
 
 === THIS SCENE'S REVISION DIRECTIVE ===
-${item.directive}
+${item.directive}${item.specifics ? `\n\n=== SPECIALIST NOTES (verbatim from the lens reports — honor these specifics, they are the depth of the fix) ===\n${item.specifics}` : ""}
 
 === OVERALL CRITIQUE (context ONLY — do not apply fixes assigned to OTHER scenes; each issue has exactly one owner scene and this scene's job is the directive above) ===
 ${summaryContext}
@@ -903,6 +1118,22 @@ ${craftDirectives}${boundary}${feedback}`,
           userMessage: `Revise this scene per the directive.\n\n=== SCENE ===\n${sceneText}`,
         });
         if (!result.text) return await abortRun(item.sceneId, result.error);
+
+        if (result.shrinkViolation) {
+          // The rewrite destroyed prose the directive didn't target, twice.
+          // Keep the carried-forward ORIGINAL and fail the item honestly.
+          changelogLines.push(
+            `- **[${item.issueId}]** ${opUsed} ${item.sceneId}: ${item.directive}\n  - REVERTED: ${result.verify.evidence}; original scene preserved unchanged — re-run this item as a line_edit or with an explicit cut directive`,
+          );
+          coverage.push({
+            issueId: item.issueId,
+            op: opUsed,
+            scene: item.sceneId,
+            status: "failed",
+            detail: `reverted — ${result.verify.evidence}`,
+          });
+          continue;
+        }
         finalText = result.text;
         gateNote = result.gateNote;
         verify = result.verify;
@@ -915,6 +1146,7 @@ ${craftDirectives}${boundary}${feedback}`,
         target_version,
       );
       revisedCount++;
+      trackGate(item.sceneId, gateNote);
       const diag = await rescore(item.sceneId, finalText);
       const d = lineDiffStats(sceneText, finalText);
       changelogLines.push(
@@ -964,6 +1196,28 @@ ${craftDirectives}${boundary}${feedback}`,
           else if (row.status === "unactionable") issue.status = "needs-human";
         }
       }
+      // Auto-file an OPEN issue for every unresolved continuity contradiction,
+      // so the next planning round explicitly targets it instead of it riding
+      // along silently in the manuscript.
+      for (const gf of gateFailures) {
+        const id = `continuity-${gf.scene}`;
+        let issue = ledger.issues.find((i: any) => i.id === id);
+        if (!issue) {
+          issue = {
+            id,
+            title: `Unresolved continuity contradiction in ${gf.scene}`,
+            first_flagged: target_version,
+            status: "open",
+            history: [],
+          };
+          ledger.issues.push(issue);
+        }
+        issue.status = "open";
+        issue.history.push({
+          version: stamp,
+          event: gf.note.slice(0, 300),
+        });
+      }
       await workspaceExporter.saveIssueLedger(story_id, ledger);
     } catch {
       /* ledger is best-effort */
@@ -980,11 +1234,15 @@ ${craftDirectives}${boundary}${feedback}`,
       )
       .join("\n");
 
+    const gateWarning = gateFailures.length
+      ? `\n\n⚠ UNRESOLVED CONTINUITY CONTRADICTIONS (${gateFailures.length}) — these shipped in ${target_version} and need attention:\n${gateFailures.map((g) => `- ${g.scene}: ${g.note.replace("consistency gate: still flags", "").trim()}`).join("\n")}\nEach has been filed as an open 'continuity-<scene>' issue in the ledger so the next round targets it.`
+      : "";
+
     return {
       content: [
         {
           type: "text",
-          text: `Revision complete. ${target_version} written from ${source_version}: ${revisedCount} operation(s) executed across ${copiedIds.length} scenes (unflagged scenes carried forward verbatim).
+          text: `${rerunNote}Revision complete. ${target_version} written from ${source_version}: ${revisedCount} operation(s) executed across ${copiedIds.length} scenes (unflagged scenes carried forward verbatim).${gateWarning}
 
 COVERAGE — every critique item, honestly:
 ${coverageText || "(none)"}

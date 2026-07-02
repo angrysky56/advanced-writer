@@ -175,8 +175,8 @@ The advanced-writer framework features a suite of 17 native MCP tools to handle 
 7. **batch_revise_pathologies**: Scans a story's diagnostics, triggers a Character Writer's Room debate for failing scenes, and automatically rewrites them based on the characters' feedback.
 8. **build_world_bible**: Expands a premise into a highly detailed World Bible including Factions, Tech/Magic, Economics, and Geography, and saves it to Vector Memory.
 9. **expand_to_novel**: Expands a synopsis into a structured ARC (beat-sheet scaffold seeded into the graph timeline + Chroma), runs a world-model self-consistency check, and optionally auto-drafts the whole manuscript beat by beat with the per-scene continuity gate.
-10. **storyscope_final_review**: Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.
-11. **apply_storyscope_revisions**: Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...). The planner assigns each critique issue to EXACTLY ONE operation: 'rewrite' (full-scene revision), 'line_edit' (surgical anchored edits that preserve polished prose), 'cut_scene', 'merge_scenes', or 'add_scene' — so structural fixes the review asks for are actually executable. Every change is (a) checked against the World Bible's hard rules, (b) VERIFIED against its own directive (PASS/FAIL with cited evidence, retried with auditor feedback on FAIL), (c) re-scored on the neurochemical diagnostic, and (d) logged with deterministic diff stats. Ends with a COVERAGE REPORT mapping every critique item -> op -> scene -> verified status (including items it could NOT action, honestly), and updates the persistent cross-version issue ledger. Pass 'directives' to apply a human-approved/edited plan instead of the auto-generated one. This tool only revises PROSE — for canon reconciliation use reconcile_storyscope_canon.
+10. **storyscope_final_review**: Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches parallel analytical lenses (Plot, Agents, Style, etc. + Actors' Table), synthesizes them into an Executive Summary (ledger verdicts, self-consistency check, scene diagnostics folded in), and compiles the editable revision plan to storyscope-reports/<version>/revision-plan.json — the exact operations apply_storyscope_revisions will execute.
+11. **apply_storyscope_revisions**: Builds the next draft version from the StoryScope review. Non-destructive and auto-incrementing (v1->v2->v3...); re-running when the latest version lacks its own review REBUILDS it from its predecessor (rerun/resume). Six operations per critique issue (exactly one owner each): rewrite, line_edit, global_line_edit (manuscript-wide line pass), cut_scene, merge_scenes, add_scene. Every change is gated against the World Bible, VERIFIED against its own directive with retry, guarded against unrequested prose loss (excess shrinkage reverts), scored for neurochemical/pathology deltas, and logged with diff stats. Ends with a COVERAGE REPORT and updates the cross-version issue ledger. Executes the saved revision-plan.json from the review (user-editable) when present; auto-plans otherwise; `directives` overrides both. Prose only — canon reconciliation is reconcile_storyscope_canon.
 12. **reconcile_storyscope_canon**: Applies the StoryScope review's CANON RECONCILIATION findings: updates the World Bible, Architecture Brief, and character graph metadata so the planning documents catch up to the manuscript's improvements. Complements apply_storyscope_revisions, which only rewrites prose and deliberately ignores canon divergence — this tool is the other half of the review's to-do list and never touches scene text. Non-destructive: the previous World Bible / Architecture Brief are backed up before being overwritten, and every run appends to a persistent changelog.
 13. **find_replace**: Deterministic find & replace across a story's documents — the literal counterpart to the AI rewrite tools. Renames a term everywhere, fixes a recurring typo, or changes a single word/line, touching ONLY the matched text. Defaults to a safe PREVIEW (apply=false) that reports every match without changing files; set apply=true to write the edits (each touched file is backed up first). Supports literal, whole-word, and regex matching.
 14. **brainstorm_ideas**: Generate a batch of genuinely good, distinct story concepts (logline + genre + tone + hook) for brainstorming — premises with a real emotional core and a fresh angle, the kind that could become a beloved or cult-classic novel, never gimmicks or absurdist mashups. Use when the user wants fresh story ideas, riffs on a seed, or 'more like that' — discussion only; this never starts writing a story.
@@ -205,16 +205,16 @@ All domain knowledge in `references/`:
 
 <workflows_index>
 
-| Workflow              | Purpose                                                  | Primary References           |
-| --------------------- | -------------------------------------------------------- | ---------------------------- |
-| create-narrative.md   | Build a complete narrative from idea to draft            | All references               |
-| develop-characters.md | Create persistent, Jungian-anchored character profiles   | 03, 04                       |
-| review-narrative.md   | Score and diagnose existing text                         | 01, 04, 05                   |
-| select-structure.md   | Choose the right structural paradigm                     | 02, 00                       |
-| rewrite-scene.md      | Targeted scene rewriting with neuro-critique             | 01, 05                       |
-| build-world-bible.md  | Autonomously expand a premise into a massive World Bible | 00                           |
-| expand-to-novel.md    | Outline a beat sheet and autonomously draft a full novel | All references               |
-| batch-revise.md       | Character Writer's Room pathology revision               | 03, 04, 05                   |
+| Workflow              | Purpose                                                            | Primary References           |
+| --------------------- | ------------------------------------------------------------------ | ---------------------------- |
+| create-narrative.md   | Build a complete narrative from idea to draft                      | All references               |
+| develop-characters.md | Create persistent, Jungian-anchored character profiles             | 03, 04                       |
+| review-narrative.md   | Score and diagnose existing text                                   | 01, 04, 05                   |
+| select-structure.md   | Choose the right structural paradigm                               | 02, 00                       |
+| rewrite-scene.md      | Targeted scene rewriting with neuro-critique                       | 01, 05                       |
+| build-world-bible.md  | Autonomously expand a premise into a massive World Bible           | 00                           |
+| expand-to-novel.md    | Outline a beat sheet and autonomously draft a full novel           | All references               |
+| batch-revise.md       | Character Writer's Room pathology revision                         | 03, 04, 05                   |
 | storyscope-review.md  | 10-lens structural audit, prose revision, and canon reconciliation | 05, storyscope-anti-patterns |
 
 </workflows_index>

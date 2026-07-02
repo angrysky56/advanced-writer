@@ -5,6 +5,8 @@ import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
 import { safeParseJson } from "../ai/extract.js";
+import { diagnosticsDigest } from "./_revision-support.js";
+import { buildAndSaveRevisionPlan } from "./_revision-planner.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,7 +14,7 @@ const __dirname = path.dirname(__filename);
 export const storyscopeFinalReviewDef = {
   name: "storyscope_final_review",
   description:
-    "Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches 7 parallel analytical lenses (Plot, Agents, Style, etc.) and synthesizes them into an Executive Summary.",
+    "Runs the ultimate multi-agent StoryScope review on a finished manuscript. Dispatches parallel analytical lenses (Plot, Agents, Style, etc. + the Actors' Table), synthesizes them into an Executive Summary (with ledger verdicts, a self-consistency check, and the scene diagnostics folded in), and COMPILES the concrete revision plan to storyscope-reports/<version>/revision-plan.json — the editable list of operations apply_storyscope_revisions will execute.",
   inputSchema: {
     type: "object",
     properties: {
@@ -50,8 +52,7 @@ export async function executeStoryscopeFinalReview(args: any) {
           ...versions.map((v) => parseInt(v.replace(/\D/g, ""), 10) || 1),
         )
       : 1;
-    const version =
-      args.version || (versions.length ? `v${latestNum}` : "v1");
+    const version = args.version || (versions.length ? `v${latestNum}` : "v1");
 
     const manuscript = await workspaceExporter.readManuscript(
       story_id,
@@ -271,10 +272,7 @@ End EACH character with a line starting "DEMAND:" — the one concrete, scene-re
           )
         : null;
       const prevChangelog = prevVersion
-        ? await workspaceExporter.readStoryscopeChangelog(
-            story_id,
-            prevVersion,
-          )
+        ? await workspaceExporter.readStoryscopeChangelog(story_id, prevVersion)
         : null;
       if (ledgerBlock || prevSummary || prevChangelog) {
         priorContext = `
@@ -284,6 +282,20 @@ ${ledgerBlock ? `OPEN ISSUES FROM THE CROSS-VERSION LEDGER:\n${ledgerBlock}\n` :
       }
     } catch {
       priorContext = "";
+    }
+
+    // SCENE DIAGNOSTICS: fold the per-scene neurochemical scores + pathology
+    // flags (what the author sees in the Studio Inspector) into the synthesis,
+    // so standing warnings become critique items instead of permanent wallpaper.
+    let diagnosticsContext = "";
+    try {
+      const diags = await workspaceExporter.readAllDiagnostics(story_id);
+      const digest = diagnosticsDigest(diags);
+      if (digest) {
+        diagnosticsContext = `\n\n=== SCENE DIAGNOSTICS (neurochemical scores 1-10 + pathology flags per scene) ===\n${digest}\n\nTreat flagged pathologies as candidate craft issues for bucket (A): confirm each against the manuscript and the lens reports, then either fold it into the To-Do list (scene-referenced, naming the pathology) or explicitly dismiss it as intentional (e.g. a deliberately quiet scene running low cortisol). Do not leave a pathology flag unaddressed in both directions.`;
+      }
+    } catch {
+      diagnosticsContext = "";
     }
 
     // Synthesize Executive Summary
@@ -301,13 +313,17 @@ Read all reports and synthesize them into a single, cohesive "Executive Summary"
 
 One lens, ACTORS_TABLE, is the cast grading their own emotional performance scene by scene against the Director's intent. Treat its "DEMAND:" lines as first-class craft fixes — fold the genuine ones (a character feeling false, flat, or off-arc in a specific scene) into bucket (A) REVISE PROSE, scene-referenced.
 
-${priorContext ? `5. LEDGER VERDICTS — using the PRIOR ROUND CONTEXT below, give a one-line verdict for EACH open ledger issue: RESOLVED (cite the evidence in this draft), IMPROVED (what remains), or PERSISTS (why the applied fix didn't land). Reference issues by their [id].
+${
+  priorContext
+    ? `5. LEDGER VERDICTS — using the PRIOR ROUND CONTEXT below, give a one-line verdict for EACH open ledger issue: RESOLVED (cite the evidence in this draft), IMPROVED (what remains), or PERSISTS (why the applied fix didn't land). Reference issues by their [id].
 
 CONVERGENCE RULES (critical — this is round N of an iterating loop, not a first review):
 - Do NOT re-litigate a choice the previous round explicitly praised or accepted. If you genuinely believe a prior accepted decision must be reversed, you MUST prefix the item with "REVERSAL:" and justify why the previous round was wrong — silent flip-flops are forbidden.
 - Do NOT recommend re-adding what a previous round deliberately cut, or re-cutting what it deliberately added, unless the execution (not the idea) failed.
 - Your To-Do list must be INTERNALLY CONSISTENT with your own Strengths section: never demand a change that would undo something you list as a strength.
-` : ""}Never recommend rewriting good prose merely to conform to an earlier outline. Format beautifully in Markdown.`;
+`
+    : ""
+}Never recommend rewriting good prose merely to conform to an earlier outline. Format beautifully in Markdown.`;
 
     const allReportsContext = reports
       .map((r) => `## LENS: ${r.aspect.toUpperCase()}\n${r.report}`)
@@ -316,7 +332,7 @@ CONVERGENCE RULES (critical — this is round N of an iterating loop, not a firs
     let executiveSummary = await aiRouter.generateCompletion({
       taskType: "diagnostic",
       systemPrompt: synthesisPrompt,
-      userMessage: `Synthesize the following reports:${priorContext}\n\n${allReportsContext}`,
+      userMessage: `Synthesize the following reports:${priorContext}${diagnosticsContext}\n\n${allReportsContext}`,
     });
 
     // SELF-CONSISTENCY CHECK: a synthesis of 10+ lens reports can contradict
@@ -411,11 +427,28 @@ ${known || "(none yet)"}`,
       /* ledger is best-effort */
     }
 
+    // COMPILE THE REVISION PLAN now, as the review's final artifact —
+    // storyscope-reports/<version>/revision-plan.json. This is the concrete,
+    // editable list of operations (op, scene, directive, verbatim lens
+    // specifics, unactionable items) that apply_storyscope_revisions will
+    // execute. The user reads/edits THIS in the Studio, so what they approve
+    // is exactly what runs — no re-planning at apply time.
+    let planNote = "";
+    try {
+      const plan = await buildAndSaveRevisionPlan(story_id, version);
+      if (plan) {
+        planNote = ` Revision plan compiled: ${plan.revisions.length} operation(s)${plan.unactionable.length ? ` + ${plan.unactionable.length} needs-human item(s)` : ""} saved to storyscope-reports/${version}/revision-plan.json — review/edit it, then run apply_storyscope_revisions (it executes this plan).`;
+      }
+    } catch {
+      planNote =
+        " (Revision plan compilation failed — apply_storyscope_revisions will auto-plan instead.)";
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: `StoryScope Final Review Complete for ${version}! Generated ${reports.length} of ${aspectFiles.length} aspect reports${failedCount > 0 ? ` (${failedCount} lens(es) failed and were skipped)` : ""} and 1 Executive Summary.${selfCheckNote} Saved to workspace under ${story_id}/storyscope-reports/${version}. Cross-version issue statuses updated in storyscope-reports/issue-ledger.json.`,
+          text: `StoryScope Final Review Complete for ${version}! Generated ${reports.length} of ${aspectFiles.length} aspect reports${failedCount > 0 ? ` (${failedCount} lens(es) failed and were skipped)` : ""} and 1 Executive Summary.${selfCheckNote} Saved to workspace under ${story_id}/storyscope-reports/${version}. Cross-version issue statuses updated in storyscope-reports/issue-ledger.json.${planNote}`,
         },
       ],
     };
