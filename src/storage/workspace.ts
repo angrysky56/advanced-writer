@@ -576,6 +576,89 @@ export class WorkspaceExporter {
   }
 
   /**
+   * Delete ONE scene draft from a version. Used ONLY on a freshly built target
+   * version (cut_scene / merge_scenes structural ops) — source versions are
+   * never touched, so every cut remains recoverable from the prior version.
+   */
+  async deleteDraft(
+    storyName: string,
+    sceneId: string,
+    version: string,
+  ): Promise<boolean> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const sceneSlug = this.sanitizeFilename(sceneId);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "drafts",
+      version,
+      `${sceneSlug}.md`,
+    );
+    try {
+      await fs.promises.unlink(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Persistent cross-version ISSUE LEDGER (storyscope-reports/issue-ledger.json).
+   * Each critique item gets a stable id so reviews can verify resolution instead
+   * of re-litigating, and the apply step can record what it actually attempted.
+   */
+  async readIssueLedger(storyName: string): Promise<{ issues: any[] }> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const filePath = path.join(
+      this.baseDir,
+      storySlug,
+      "storyscope-reports",
+      "issue-ledger.json",
+    );
+    try {
+      const raw = await fs.promises.readFile(filePath, "utf8");
+      const data = JSON.parse(raw);
+      return data && Array.isArray(data.issues) ? data : { issues: [] };
+    } catch {
+      return { issues: [] };
+    }
+  }
+
+  async saveIssueLedger(
+    storyName: string,
+    ledger: { issues: any[] },
+  ): Promise<string> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = path.join(this.baseDir, storySlug, "storyscope-reports");
+    await this.ensureDir(dir);
+    const filePath = path.join(dir, "issue-ledger.json");
+    await fs.promises.writeFile(
+      filePath,
+      JSON.stringify(ledger, null, 2),
+      "utf8",
+    );
+    return filePath;
+  }
+
+  /** Read a version's StoryScope changelog (what apply actually did). */
+  async readStoryscopeChangelog(
+    storyName: string,
+    version?: string,
+  ): Promise<string | null> {
+    const storySlug = this.sanitizeFilename(storyName);
+    const dir = this.resolveReportsDir(storySlug, version);
+    if (!dir) return null;
+    try {
+      return await fs.promises.readFile(
+        path.join(dir, "changelog.md"),
+        "utf8",
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Append one entry to the StoryScope changelog for a version — a persistent,
    * human-readable record of what apply_storyscope_revisions / the canon
    * reconciler actually did, since the tool responses themselves are ephemeral.
