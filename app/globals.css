@@ -1060,3 +1060,23 @@ body {
   line-height: 1.5;
   background: rgba(0, 0, 0, 0.15);
 }
+
+@keyframes borderGlowPulse {
+  0%, 100% {
+    border-left-color: #a855f7;
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
+    background-color: rgba(168, 85, 247, 0.12);
+  }
+  50% {
+    border-left-color: #c084fc;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+    background-color: rgba(168, 85, 247, 0.22);
+  }
+}
+.glowing-job-banner {
+  animation: borderGlowPulse 2.5s infinite ease-in-out !important;
+}
+.spinning-gear {
+  display: inline-block;
+  animation: spin 3s infinite linear;
+}

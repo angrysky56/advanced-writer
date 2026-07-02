@@ -44,7 +44,9 @@ function lineDiff(
   for (let i = n - 1; i >= 0; i--)
     for (let j = m - 1; j >= 0; j--)
       dp[i][j] =
-        a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        a[i] === b[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
   const out: { t: "same" | "add" | "del"; x: string }[] = [];
   let i = 0,
     j = 0;
@@ -138,7 +140,9 @@ function AuthorNoteEditor({
           boxSizing: "border-box",
         }}
       />
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}
+      >
         <button
           onClick={save}
           disabled={saving}
@@ -164,8 +168,7 @@ function AuthorNoteEditor({
  *  "[object Object]"). */
 function fmtSheet(v: any): string {
   if (v == null) return "";
-  if (Array.isArray(v))
-    return v.map(fmtSheet).filter(Boolean).join("; ");
+  if (Array.isArray(v)) return v.map(fmtSheet).filter(Boolean).join("; ");
   if (typeof v === "object")
     return Object.entries(v)
       .map(([k, val]) => `${k}: ${fmtSheet(val)}`)
@@ -191,13 +194,15 @@ function Markdown({ text }: { text: string }) {
     }
   };
   const inline = (s: string) =>
-    s.split(/(\*\*[^*]+\*\*)/g).map((seg, i) =>
-      seg.startsWith("**") && seg.endsWith("**") ? (
-        <strong key={i}>{seg.slice(2, -2)}</strong>
-      ) : (
-        <span key={i}>{seg}</span>
-      ),
-    );
+    s
+      .split(/(\*\*[^*]+\*\*)/g)
+      .map((seg, i) =>
+        seg.startsWith("**") && seg.endsWith("**") ? (
+          <strong key={i}>{seg.slice(2, -2)}</strong>
+        ) : (
+          <span key={i}>{seg}</span>
+        ),
+      );
   lines.forEach((raw, i) => {
     const l = raw.trimEnd();
     if (!l.trim()) {
@@ -226,9 +231,14 @@ function Markdown({ text }: { text: string }) {
     if (/^[-*]\s+/.test(l)) {
       flush(i);
       out.push(
-        <div key={`li${i}`} style={{ display: "flex", gap: 8, margin: "2px 0" }}>
+        <div
+          key={`li${i}`}
+          style={{ display: "flex", gap: 8, margin: "2px 0" }}
+        >
           <span style={{ color: C.accent }}>•</span>
-          <span style={{ lineHeight: 1.6 }}>{inline(l.replace(/^[-*]\s+/, ""))}</span>
+          <span style={{ lineHeight: 1.6 }}>
+            {inline(l.replace(/^[-*]\s+/, ""))}
+          </span>
         </div>,
       );
       return;
@@ -240,7 +250,10 @@ function Markdown({ text }: { text: string }) {
 }
 
 function normalizeSceneId(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 export default function Studio() {
@@ -288,8 +301,12 @@ export default function Studio() {
   // Default to "draft": the Studio is a drafting surface, so the copilot should
   // ACT (call the drafting tools) by default rather than interview the user.
   // Users can still toggle to Brainstorm for discovery conversations.
-  const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">("draft");
-  const [copilotHeight, setCopilotHeight] = useState<"normal" | "expanded">("normal");
+  const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">(
+    "draft",
+  );
+  const [copilotHeight, setCopilotHeight] = useState<"normal" | "expanded">(
+    "normal",
+  );
 
   // Refs keep the transport body current without re-creating the chat client.
   const activeIdRef = useRef(activeId);
@@ -308,6 +325,36 @@ export default function Studio() {
     }),
   });
   const busy = status === "submitted" || status === "streaming";
+
+  // ---- system status checks ----
+  const [chromaStatus, setChromaStatus] = useState<
+    "loading" | "online" | "offline"
+  >("loading");
+  const [neo4jStatus, setNeo4jStatus] = useState<
+    "loading" | "online" | "offline"
+  >("loading");
+
+  useEffect(() => {
+    const checkSystem = async () => {
+      try {
+        const res = await fetch("/api/system-check");
+        if (res.ok) {
+          const data = await res.json();
+          setChromaStatus(data.chroma === "online" ? "online" : "offline");
+          setNeo4jStatus(data.neo4j === "online" ? "online" : "offline");
+        } else {
+          setChromaStatus("offline");
+          setNeo4jStatus("offline");
+        }
+      } catch {
+        setChromaStatus("offline");
+        setNeo4jStatus("offline");
+      }
+    };
+    checkSystem();
+    const interval = setInterval(checkSystem, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ---- chat history (per-story, persisted) ----
   const [chatId, setChatId] = useState<string | null>(null);
@@ -363,7 +410,9 @@ export default function Studio() {
   );
 
   const arcOf = (name: string) =>
-    arc.find((c) => (c.name || "").toLowerCase() === (name || "").toLowerCase());
+    arc.find(
+      (c) => (c.name || "").toLowerCase() === (name || "").toLowerCase(),
+    );
 
   const diagOf = (sceneId: string) =>
     (story?.diagnostics || []).find(
@@ -702,21 +751,98 @@ export default function Studio() {
   const contextActions: { label: string; run: () => void }[] =
     sel.type === "scene"
       ? [
-          { label: running === "revise" ? "…revising" : "✎ Revise scene", run: () => runTool("revise", "rewrite_scene", { story_id: activeId, scene_id: sel.id, scene_text: sceneText, target_axis: "cortisol", version }) },
-          { label: running === "rescore" ? "…scoring" : "🔍 Re-score", run: () => runTool("rescore", "review_narrative", { story_id: activeId, scene_id: sel.id, text: sceneText, scope: "scene" }) },
-          { label: "🎭 Character debate", run: () => send(`Run batch_revise_pathologies on this project (async, version "${version}") to convene the Character Writer's Room.`) },
+          {
+            label: running === "revise" ? "…revising" : "✎ Revise scene",
+            run: () =>
+              runTool("revise", "rewrite_scene", {
+                story_id: activeId,
+                scene_id: sel.id,
+                scene_text: sceneText,
+                target_axis: "cortisol",
+                version,
+              }),
+          },
+          {
+            label: running === "rescore" ? "…scoring" : "🔍 Re-score",
+            run: () =>
+              runTool("rescore", "review_narrative", {
+                story_id: activeId,
+                scene_id: sel.id,
+                text: sceneText,
+                scope: "scene",
+              }),
+          },
+          {
+            label: "🎭 Character debate",
+            run: () =>
+              send(
+                `Run batch_revise_pathologies on this project (async, version "${version}") to convene the Character Writer's Room.`,
+              ),
+          },
         ]
       : sel.type === "character"
         ? [
-            { label: "✦ Develop", run: () => send(`Develop the character "${sel.id}" further using develop_character.`) },
-            { label: "+ New character", run: () => send(`Add a new character to this project with develop_character (action create) — ask me for name and archetype.`) },
+            {
+              label: "✦ Develop",
+              run: () =>
+                send(
+                  `Develop the character "${sel.id}" further using develop_character.`,
+                ),
+            },
+            {
+              label: "+ New character",
+              run: () =>
+                send(
+                  `Add a new character to this project with develop_character (action create) — ask me for name and archetype.`,
+                ),
+            },
           ]
         : [
-            { label: "+ New story", run: () => send(`Start a brand-new story with create_narrative — ask me for the logline, genre, tone, and length.`) },
-            { label: "📋 StoryScope audit", run: () => send(`Run storyscope_final_review on this project for version "${version}" (async).`) },
-            { label: "✎ Apply revisions", run: () => send(`Run apply_storyscope_revisions on this project (async), reading the review for source version "${version}".`) },
-            { label: running === "publish" ? "…making e-book + PDF" : `📦 Publish ${version} (e-book + PDF)`, run: () => runTool("publish", "publish_story", { story_id: activeId, version, target: "share" }) },
-            { label: running === "amazon" ? "…building Amazon kit" : `🛒 Publish ${version} to Amazon`, run: () => runTool("amazon", "publish_story", { story_id: activeId, version, target: "amazon" }) },
+            {
+              label: "+ New story",
+              run: () =>
+                send(
+                  `Start a brand-new story with create_narrative — ask me for the logline, genre, tone, and length.`,
+                ),
+            },
+            {
+              label: "📋 StoryScope audit",
+              run: () =>
+                send(
+                  `Run storyscope_final_review on this project for version "${version}" (async).`,
+                ),
+            },
+            {
+              label: "✎ Apply revisions",
+              run: () =>
+                send(
+                  `Run apply_storyscope_revisions on this project (async), reading the review for source version "${version}".`,
+                ),
+            },
+            {
+              label:
+                running === "publish"
+                  ? "…making e-book + PDF"
+                  : `📦 Publish ${version} (e-book + PDF)`,
+              run: () =>
+                runTool("publish", "publish_story", {
+                  story_id: activeId,
+                  version,
+                  target: "share",
+                }),
+            },
+            {
+              label:
+                running === "amazon"
+                  ? "…building Amazon kit"
+                  : `🛒 Publish ${version} to Amazon`,
+              run: () =>
+                runTool("amazon", "publish_story", {
+                  story_id: activeId,
+                  version,
+                  target: "amazon",
+                }),
+            },
           ];
 
   // ---- center content ----
@@ -731,11 +857,19 @@ export default function Studio() {
       );
     if (sel.type === "scene") {
       const d = (story.drafts || []).find((x: any) => x.id === sel.id);
-      return d ? <Markdown text={d.content} /> : <Empty msg="Scene not found." />;
+      return d ? (
+        <Markdown text={d.content} />
+      ) : (
+        <Empty msg="Scene not found." />
+      );
     }
     if (sel.type === "character") {
       const c = (story.characters || []).find((x: any) => x.name === sel.id);
-      return c ? <Markdown text={c.description} /> : <Empty msg="Character not found." />;
+      return c ? (
+        <Markdown text={c.description} />
+      ) : (
+        <Empty msg="Character not found." />
+      );
     }
     if (sel.type === "doc") {
       const text =
@@ -744,36 +878,75 @@ export default function Studio() {
           : sel.id === "worldbible"
             ? story.worldBible
             : story.executiveSummary;
-      return text ? <Markdown text={text} /> : <Empty msg="Not generated yet." />;
+      return text ? (
+        <Markdown text={text} />
+      ) : (
+        <Empty msg="Not generated yet." />
+      );
     }
     if (sel.type === "aspect") {
-      const r = (story.aspectReports || []).find((x: any) => x.aspect === sel.id);
-      return r ? <Markdown text={r.content} /> : <Empty msg="Report not found." />;
+      const r = (story.aspectReports || []).find(
+        (x: any) => x.aspect === sel.id,
+      );
+      return r ? (
+        <Markdown text={r.content} />
+      ) : (
+        <Empty msg="Report not found." />
+      );
     }
     if (sel.type === "diff") {
       const vers: string[] = story.availableVersions || ["v1"];
       const diff = lineDiff(diffTextA, diffTextB);
       return (
         <div>
-          <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center" }}>
-            <span style={{ color: C.dim, fontSize: "0.8rem" }}>Compare manuscript</span>
-            <select value={diffA} onChange={(e) => setDiffA(e.target.value)} style={selectStyle}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginBottom: 14,
+              alignItems: "center",
+            }}
+          >
+            <span style={{ color: C.dim, fontSize: "0.8rem" }}>
+              Compare manuscript
+            </span>
+            <select
+              value={diffA}
+              onChange={(e) => setDiffA(e.target.value)}
+              style={selectStyle}
+            >
               {vers.map((v) => (
-                <option key={v} value={v} style={{ background: C.panel }}>{v}</option>
+                <option key={v} value={v} style={{ background: C.panel }}>
+                  {v}
+                </option>
               ))}
             </select>
             <span style={{ color: C.dim }}>→</span>
-            <select value={diffB} onChange={(e) => setDiffB(e.target.value)} style={selectStyle}>
+            <select
+              value={diffB}
+              onChange={(e) => setDiffB(e.target.value)}
+              style={selectStyle}
+            >
               {vers.map((v) => (
-                <option key={v} value={v} style={{ background: C.panel }}>{v}</option>
+                <option key={v} value={v} style={{ background: C.panel }}>
+                  {v}
+                </option>
               ))}
             </select>
-            <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: C.dim }}>
+            <span
+              style={{ marginLeft: "auto", fontSize: "0.72rem", color: C.dim }}
+            >
               <span style={{ color: "#e06c75" }}>− removed</span> ·{" "}
               <span style={{ color: "#7cd992" }}>+ added</span>
             </span>
           </div>
-          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.78rem", lineHeight: 1.5 }}>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: "0.78rem",
+              lineHeight: 1.5,
+            }}
+          >
             {diff.map((d, idx) => (
               <div
                 key={idx}
@@ -831,7 +1004,9 @@ export default function Studio() {
                   </span>
                 ) : (
                   d.pathologies.map((p: string, i: number) => (
-                    <div key={i} style={pill("#f59e0b")}>⚠ {p}</div>
+                    <div key={i} style={pill("#f59e0b")}>
+                      ⚠ {p}
+                    </div>
                   ))
                 )}
               </div>
@@ -845,9 +1020,17 @@ export default function Studio() {
           ) : (
             arc.map((c, i) => (
               <div key={i} style={{ marginBottom: 10 }}>
-                <div style={{ fontWeight: 600, fontSize: "0.8rem" }}>{c.name}</div>
+                <div style={{ fontWeight: 600, fontSize: "0.8rem" }}>
+                  {c.name}
+                </div>
                 {c.scratchpad ? (
-                  <div style={{ fontSize: "0.72rem", color: C.dim, lineHeight: 1.5 }}>
+                  <div
+                    style={{
+                      fontSize: "0.72rem",
+                      color: C.dim,
+                      lineHeight: 1.5,
+                    }}
+                  >
                     {["location", "wants", "knows", "holding", "relationships"]
                       .filter((k) => c.scratchpad[k])
                       .map((k) => (
@@ -902,7 +1085,9 @@ export default function Studio() {
               Object.entries(o || {}).filter(([, v]) => typeof v === "number");
             return (
               <>
-                <Section title={`Panksepp drives${livePk ? asOf : " (baseline)"}`} />
+                <Section
+                  title={`Panksepp drives${livePk ? asOf : " (baseline)"}`}
+                />
                 {(livePk
                   ? numEntries(livePk)
                   : Object.entries(c.panksepp || {})
@@ -943,7 +1128,9 @@ export default function Studio() {
             <Muted text="No scratchpad recorded yet." />
           )}
           <Section title="Affect arc" />
-          <Muted text={`${a?.snapshots?.length || 0} scene snapshot(s) tracked. Full wheel + arc chart in the Character Workbench (next slice).`} />
+          <Muted
+            text={`${a?.snapshots?.length || 0} scene snapshot(s) tracked. Full wheel + arc chart in the Character Workbench (next slice).`}
+          />
         </div>
       );
     }
@@ -952,7 +1139,10 @@ export default function Studio() {
       <div>
         <Section title="StoryScope" />
         {story.executiveSummary ? (
-          <button style={linkBtn} onClick={() => setSel({ type: "doc", id: "storyscope" })}>
+          <button
+            style={linkBtn}
+            onClick={() => setSel({ type: "doc", id: "storyscope" })}
+          >
             Open Executive Summary →
           </button>
         ) : (
@@ -970,7 +1160,66 @@ export default function Studio() {
     <div style={shell}>
       {/* header */}
       <div style={header}>
-        <span style={{ fontWeight: 700, color: C.accent }}>◆ Advanced Writer Studio</span>
+        <span style={{ fontWeight: 700, color: C.accent }}>
+          ◆ Advanced Writer Studio
+        </span>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            fontSize: "0.68rem",
+            color: C.dim,
+            marginLeft: 16,
+          }}
+        >
+          <span
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+            title={`Chroma DB: ${chromaStatus}`}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background:
+                  chromaStatus === "loading"
+                    ? "#a855f7"
+                    : chromaStatus === "online"
+                      ? "#7cd992"
+                      : "#e06c75",
+                boxShadow:
+                  chromaStatus === "online" ? "0 0 6px #7cd992" : "none",
+                display: "inline-block",
+              }}
+            />
+            Chroma
+          </span>
+          <span
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+            title={`Neo4j Graph: ${neo4jStatus}`}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background:
+                  neo4jStatus === "loading"
+                    ? "#a855f7"
+                    : neo4jStatus === "online"
+                      ? "#7cd992"
+                      : "#e06c75",
+                boxShadow:
+                  neo4jStatus === "online" ? "0 0 6px #7cd992" : "none",
+                display: "inline-block",
+              }}
+            />
+            Neo4j
+          </span>
+        </div>
+
         <select
           value={activeId}
           onChange={(e) => setActiveId(e.target.value)}
@@ -996,14 +1245,27 @@ export default function Studio() {
             ))}
           </select>
         )}
-        <a href="/classic" style={{ marginLeft: "auto", color: C.dim, fontSize: "0.78rem" }}>
+        <a
+          href="/classic"
+          style={{ marginLeft: "auto", color: C.dim, fontSize: "0.78rem" }}
+        >
           ✦ Brainstorm
         </a>
       </div>
 
       {/* explorer */}
-      <div style={{ ...col, borderRight: `1px solid ${C.border}`, overflowY: "auto" }}>
-        <NavItem label="📖 Full Manuscript" active={sel.type === "manuscript"} onClick={() => setSel({ type: "manuscript" })} />
+      <div
+        style={{
+          ...col,
+          borderRight: `1px solid ${C.border}`,
+          overflowY: "auto",
+        }}
+      >
+        <NavItem
+          label="📖 Full Manuscript"
+          active={sel.type === "manuscript"}
+          onClick={() => setSel({ type: "manuscript" })}
+        />
         <NavItem
           label="⇄ Compare Versions"
           active={sel.type === "diff"}
@@ -1016,17 +1278,46 @@ export default function Studio() {
         />
         <Group title="Scenes" />
         {(story?.drafts || []).map((d: any) => (
-          <NavItem key={d.id} label={`▸ ${d.title}`} active={sel.type === "scene" && sel.id === d.id} onClick={() => setSel({ type: "scene", id: d.id })} indent />
+          <NavItem
+            key={d.id}
+            label={`▸ ${d.title}`}
+            active={sel.type === "scene" && sel.id === d.id}
+            onClick={() => setSel({ type: "scene", id: d.id })}
+            indent
+          />
         ))}
         <Group title="Cast" />
         {(story?.characters || []).map((c: any) => (
-          <NavItem key={c.name} label={`◐ ${c.name}`} active={sel.type === "character" && sel.id === c.name} onClick={() => setSel({ type: "character", id: c.name })} indent />
+          <NavItem
+            key={c.name}
+            label={`◐ ${c.name}`}
+            active={sel.type === "character" && sel.id === c.name}
+            onClick={() => setSel({ type: "character", id: c.name })}
+            indent
+          />
         ))}
         <Group title="Structure" />
-        <NavItem label="◷ Architecture Brief" active={sel.type === "doc" && (sel as any).id === "architecture"} onClick={() => setSel({ type: "doc", id: "architecture" })} indent />
-        <NavItem label="◷ World Bible" active={sel.type === "doc" && (sel as any).id === "worldbible"} onClick={() => setSel({ type: "doc", id: "worldbible" })} indent />
-        <NavItem label="◷ StoryScope Summary" active={sel.type === "doc" && (sel as any).id === "storyscope"} onClick={() => setSel({ type: "doc", id: "storyscope" })} indent />
-        {(story?.aspectReports || []).length > 0 && <Group title="Critique Lenses" />}
+        <NavItem
+          label="◷ Architecture Brief"
+          active={sel.type === "doc" && (sel as any).id === "architecture"}
+          onClick={() => setSel({ type: "doc", id: "architecture" })}
+          indent
+        />
+        <NavItem
+          label="◷ World Bible"
+          active={sel.type === "doc" && (sel as any).id === "worldbible"}
+          onClick={() => setSel({ type: "doc", id: "worldbible" })}
+          indent
+        />
+        <NavItem
+          label="◷ StoryScope Summary"
+          active={sel.type === "doc" && (sel as any).id === "storyscope"}
+          onClick={() => setSel({ type: "doc", id: "storyscope" })}
+          indent
+        />
+        {(story?.aspectReports || []).length > 0 && (
+          <Group title="Critique Lenses" />
+        )}
         {(story?.aspectReports || []).map((r: any) => (
           <NavItem
             key={r.aspect}
@@ -1039,7 +1330,15 @@ export default function Studio() {
       </div>
 
       {/* center: action bar + manuscript + copilot rail */}
-      <div style={{ ...col, padding: 0, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div
+        style={{
+          ...col,
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
         <div style={actionBar}>
           {contextActions.map((a, i) => (
             <button key={i} style={actionBtn} onClick={a.run} disabled={busy}>
@@ -1078,7 +1377,11 @@ export default function Studio() {
                 <button style={sendBtn} onClick={saveEdit} disabled={saving}>
                   {saving ? "…saving" : "💾 Save"}
                 </button>
-                <button style={actionBtn} onClick={cancelEdit} disabled={saving}>
+                <button
+                  style={actionBtn}
+                  onClick={cancelEdit}
+                  disabled={saving}
+                >
                   Cancel
                 </button>
               </>
@@ -1102,7 +1405,15 @@ export default function Studio() {
             </span>
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "32px 48px", fontSize: "1.02rem", color: C.text }}>
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "32px 48px",
+            fontSize: "1.02rem",
+            color: C.text,
+          }}
+        >
           {editing ? (
             <textarea
               value={editText}
@@ -1194,19 +1505,32 @@ export default function Studio() {
             <button
               style={{
                 ...railBtn,
-                background: copilotMode === "brainstorm" ? "rgba(168,85,247,0.25)" : "rgba(124,217,146,0.18)",
+                background:
+                  copilotMode === "brainstorm"
+                    ? "rgba(168,85,247,0.25)"
+                    : "rgba(124,217,146,0.18)",
                 color: copilotMode === "brainstorm" ? "#d8b4fe" : "#7cd992",
                 fontWeight: 600,
               }}
-              onClick={() => setCopilotMode(copilotMode === "brainstorm" ? "draft" : "brainstorm")}
+              onClick={() =>
+                setCopilotMode(
+                  copilotMode === "brainstorm" ? "draft" : "brainstorm",
+                )
+              }
               title={`Mode: ${copilotMode}. Click to switch.`}
             >
               {copilotMode === "brainstorm" ? "💡 Brainstorm" : "✎ Draft"}
             </button>
             <button
               style={railBtn}
-              onClick={() => setCopilotHeight(copilotHeight === "normal" ? "expanded" : "normal")}
-              title={copilotHeight === "normal" ? "Expand panel" : "Collapse panel"}
+              onClick={() =>
+                setCopilotHeight(
+                  copilotHeight === "normal" ? "expanded" : "normal",
+                )
+              }
+              title={
+                copilotHeight === "normal" ? "Expand panel" : "Collapse panel"
+              }
             >
               {copilotHeight === "normal" ? "↕ Expand" : "↕ Shrink"}
             </button>
@@ -1224,11 +1548,25 @@ export default function Studio() {
             if (running.length === 0 && !recentlyDone) return null;
             return (
               <div
+                className={running.length > 0 ? "glowing-job-banner" : ""}
                 style={{
-                  padding: "6px 12px",
+                  padding: "8px 12px",
                   borderBottom: `1px solid ${C.border}`,
-                  background: C.panel2,
-                  fontSize: "0.72rem",
+                  background:
+                    running.length > 0
+                      ? "rgba(168, 85, 247, 0.12)"
+                      : "rgba(124, 217, 146, 0.08)",
+                  borderLeft: `4px solid ${running.length > 0 ? "#a855f7" : latest?.status === "failed" ? "#e06c75" : "#7cd992"}`,
+                  fontSize: "0.74rem",
+                  fontWeight: 500,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  boxShadow:
+                    running.length > 0
+                      ? "0 0 12px rgba(168, 85, 247, 0.2)"
+                      : "none",
+                  transition: "all 0.3s ease",
                 }}
               >
                 {running.map((j: any) => (
@@ -1241,7 +1579,9 @@ export default function Studio() {
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ color: C.accent }}>⚙</span>{" "}
+                    <span className="spinning-gear" style={{ color: C.accent }}>
+                      ⚙
+                    </span>{" "}
                     {String(j.tool).replace(/_/g, " ")} — running…
                   </div>
                 ))}
@@ -1360,28 +1700,48 @@ export default function Studio() {
             <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
               {messages.length === 0 ? (
                 <div style={{ color: C.dim, fontSize: "0.8rem" }}>
-                  Copilot — knows the active project. Try: “review the manuscript”, “run a StoryScope audit”, “continue drafting the next scene”.
+                  Copilot — knows the active project. Try: “review the
+                  manuscript”, “run a StoryScope audit”, “continue drafting the
+                  next scene”.
                 </div>
               ) : (
                 messages.map((m: any) => (
-                  <div key={m.id} style={{ margin: "6px 0", fontSize: "0.84rem" }}>
-                    <b style={{ color: m.role === "user" ? C.accent : "#7cd992" }}>
+                  <div
+                    key={m.id}
+                    style={{ margin: "6px 0", fontSize: "0.84rem" }}
+                  >
+                    <b
+                      style={{
+                        color: m.role === "user" ? C.accent : "#7cd992",
+                      }}
+                    >
                       {m.role === "user" ? "you" : "copilot"}:
                     </b>{" "}
                     {m.parts?.map((p: any, i: number) =>
                       p.type === "text" ? (
                         <span key={i}>{p.text}</span>
                       ) : p.type?.startsWith?.("tool-") ? (
-                        <span key={i} style={pill(C.accent)}>⚙ {p.type.slice(5)}</span>
+                        <span key={i} style={pill(C.accent)}>
+                          ⚙ {p.type.slice(5)}
+                        </span>
                       ) : null,
                     )}
                   </div>
                 ))
               )}
-              {busy && <div style={{ color: C.dim, fontSize: "0.8rem" }}>…working</div>}
+              {busy && (
+                <div style={{ color: C.dim, fontSize: "0.8rem" }}>…working</div>
+              )}
             </div>
           )}
-          <div style={{ display: "flex", gap: 8, padding: "8px 12px", borderTop: `1px solid ${C.border}` }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              padding: "8px 12px",
+              borderTop: `1px solid ${C.border}`,
+            }}
+          >
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1397,7 +1757,13 @@ export default function Studio() {
       </div>
 
       {/* inspector */}
-      <div style={{ ...col, borderLeft: `1px solid ${C.border}`, overflowY: "auto" }}>
+      <div
+        style={{
+          ...col,
+          borderLeft: `1px solid ${C.border}`,
+          overflowY: "auto",
+        }}
+      >
         <div style={{ fontWeight: 700, fontSize: "0.85rem", marginBottom: 6 }}>
           Inspector
         </div>
@@ -1777,24 +2143,49 @@ function NavItem({ label, active, onClick, indent }: any) {
   );
 }
 const Group = ({ title }: any) => (
-  <div style={{ color: C.dim, fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: 1, margin: "12px 0 4px 4px" }}>
+  <div
+    style={{
+      color: C.dim,
+      fontSize: "0.66rem",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      margin: "12px 0 4px 4px",
+    }}
+  >
     {title}
   </div>
 );
 const Section = ({ title }: any) => (
-  <div style={{ color: C.dim, fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: 1, margin: "14px 0 6px" }}>
+  <div
+    style={{
+      color: C.dim,
+      fontSize: "0.7rem",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      margin: "14px 0 6px",
+    }}
+  >
     {title}
   </div>
 );
 const Muted = ({ text }: any) => (
-  <div style={{ color: C.dim, fontSize: "0.74rem", lineHeight: 1.5 }}>{text}</div>
+  <div style={{ color: C.dim, fontSize: "0.74rem", lineHeight: 1.5 }}>
+    {text}
+  </div>
 );
 const Empty = ({ msg }: any) => (
   <div style={{ color: C.dim, textAlign: "center", marginTop: 80 }}>{msg}</div>
 );
 function ScoreRow({ label, v }: any) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", margin: "3px 0" }}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        fontSize: "0.78rem",
+        margin: "3px 0",
+      }}
+    >
       <span style={{ color: C.dim }}>{label}</span>
       <span style={{ fontWeight: 600 }}>{v == null ? "—" : `${v}/10`}</span>
     </div>
@@ -1803,10 +2194,32 @@ function ScoreRow({ label, v }: any) {
 function Bar({ label, v }: any) {
   const n = Number(v) || 0;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "3px 0", fontSize: "0.72rem" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        margin: "3px 0",
+        fontSize: "0.72rem",
+      }}
+    >
       <span style={{ width: 78, color: C.dim }}>{label}</span>
-      <div style={{ flex: 1, height: 5, background: "rgba(255,255,255,0.08)", borderRadius: 3 }}>
-        <div style={{ width: `${n * 10}%`, height: "100%", background: C.accent, borderRadius: 3 }} />
+      <div
+        style={{
+          flex: 1,
+          height: 5,
+          background: "rgba(255,255,255,0.08)",
+          borderRadius: 3,
+        }}
+      >
+        <div
+          style={{
+            width: `${n * 10}%`,
+            height: "100%",
+            background: C.accent,
+            borderRadius: 3,
+          }}
+        />
       </div>
       <span>{n}</span>
     </div>

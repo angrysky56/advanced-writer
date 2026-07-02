@@ -17,6 +17,16 @@ export class Neo4jStorage {
     await this.driver.close();
   }
 
+  async verifyConnection(): Promise<boolean> {
+    try {
+      await this.driver.verifyConnectivity();
+      return true;
+    } catch (err) {
+      console.warn("Neo4j connection verification failed:", err);
+      return false;
+    }
+  }
+
   private getSession() {
     return this.driver.session({
       database: ENV.NEO4J_DATABASE || undefined,
@@ -562,7 +572,10 @@ export class Neo4jStorage {
       return res.records.map((r) => {
         const p = r.get("b").properties;
         return {
-          order: typeof p.order?.toNumber === "function" ? p.order.toNumber() : p.order,
+          order:
+            typeof p.order?.toNumber === "function"
+              ? p.order.toNumber()
+              : p.order,
           act: p.act,
           title: p.title,
           summary: p.summary,
@@ -606,7 +619,10 @@ export class Neo4jStorage {
       const location = rec.get("location");
       return {
         beat: {
-          order: typeof p.order?.toNumber === "function" ? p.order.toNumber() : p.order,
+          order:
+            typeof p.order?.toNumber === "function"
+              ? p.order.toNumber()
+              : p.order,
           act: p.act,
           title: p.title,
           summary: p.summary,

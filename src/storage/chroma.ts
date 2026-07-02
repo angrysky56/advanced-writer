@@ -33,6 +33,17 @@ export class ChromaStorage {
     await this.initPromise;
   }
 
+  async verifyConnection(): Promise<boolean> {
+    try {
+      await this.ensureInitialized();
+      await this.client.heartbeat();
+      return true;
+    } catch (err) {
+      console.warn("Chroma connection verification failed:", err);
+      return false;
+    }
+  }
+
   async initialize() {
     // Make sure the local Chroma server is actually running before we try to
     // open collections — start the bundled (no-Python) server if it isn't.
@@ -69,12 +80,7 @@ export class ChromaStorage {
   }
 
   /** Embed one arc beat so it can be semantically retrieved while drafting. */
-  async addBeat(
-    id: string,
-    story_id: string,
-    order: number,
-    document: string,
-  ) {
+  async addBeat(id: string, story_id: string, order: number, document: string) {
     await this.ensureInitialized();
     try {
       await this.beats.upsert({

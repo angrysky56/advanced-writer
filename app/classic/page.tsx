@@ -59,6 +59,36 @@ export default function Brainstorm() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [chatExpanded, setChatExpanded] = useState<boolean>(false);
 
+  // ---- system status checks ----
+  const [chromaStatus, setChromaStatus] = useState<
+    "loading" | "online" | "offline"
+  >("loading");
+  const [neo4jStatus, setNeo4jStatus] = useState<
+    "loading" | "online" | "offline"
+  >("loading");
+
+  useEffect(() => {
+    const checkSystem = async () => {
+      try {
+        const res = await fetch("/api/system-check");
+        if (res.ok) {
+          const data = await res.json();
+          setChromaStatus(data.chroma === "online" ? "online" : "offline");
+          setNeo4jStatus(data.neo4j === "online" ? "online" : "offline");
+        } else {
+          setChromaStatus("offline");
+          setNeo4jStatus("offline");
+        }
+      } catch {
+        setChromaStatus("offline");
+        setNeo4jStatus("offline");
+      }
+    };
+    checkSystem();
+    const interval = setInterval(checkSystem, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     initWorkspace();
     startPolling();
@@ -95,7 +125,8 @@ export default function Brainstorm() {
       }).then((r) => r.json());
       const fresh: Idea[] = Array.isArray(d?.ideas) ? d.ideas : [];
       if (d?.error) setGenError(d.error);
-      else if (fresh.length === 0) setGenError("No ideas came back — try again.");
+      else if (fresh.length === 0)
+        setGenError("No ideas came back — try again.");
       setIdeas((prev) => (append ? [...prev, ...fresh] : fresh));
     } catch (e: any) {
       setGenError(e?.message || "Generation failed.");
@@ -132,7 +163,8 @@ export default function Brainstorm() {
 
   const isSaved = (idea: Idea) =>
     saved.some(
-      (s) => s.logline.trim().toLowerCase() === idea.logline.trim().toLowerCase(),
+      (s) =>
+        s.logline.trim().toLowerCase() === idea.logline.trim().toLowerCase(),
     );
 
   const send = (text: string) => {
@@ -161,7 +193,9 @@ export default function Brainstorm() {
     <div
       style={{
         ...shell,
-        gridTemplateColumns: chatExpanded ? "260px 1fr 600px" : "260px 1fr 380px",
+        gridTemplateColumns: chatExpanded
+          ? "260px 1fr 600px"
+          : "260px 1fr 380px",
         transition: "grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
       }}
     >
@@ -170,9 +204,84 @@ export default function Brainstorm() {
         <span style={{ fontWeight: 700, color: C.accent }}>
           ✦ Advanced Writer — Brainstorm
         </span>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            fontSize: "0.68rem",
+            color: C.dim,
+            marginLeft: 16,
+          }}
+        >
+          <span
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+            title={`Chroma DB: ${chromaStatus}`}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background:
+                  chromaStatus === "loading"
+                    ? "#a855f7"
+                    : chromaStatus === "online"
+                      ? "#7cd992"
+                      : "#e06c75",
+                boxShadow:
+                  chromaStatus === "online" ? "0 0 6px #7cd992" : "none",
+                display: "inline-block",
+              }}
+            />
+            Chroma
+          </span>
+          <span
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+            title={`Neo4j Graph: ${neo4jStatus}`}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background:
+                  neo4jStatus === "loading"
+                    ? "#a855f7"
+                    : neo4jStatus === "online"
+                      ? "#7cd992"
+                      : "#e06c75",
+                boxShadow:
+                  neo4jStatus === "online" ? "0 0 6px #7cd992" : "none",
+                display: "inline-block",
+              }}
+            />
+            Neo4j
+          </span>
+        </div>
         {runningJobs.length > 0 && (
-          <span style={{ color: "#e9d5ff", fontSize: "0.74rem", marginLeft: 6 }}>
-            ⚙ {runningJobs.length} writing job(s) running…
+          <span
+            className="glowing-job-banner"
+            style={{
+              color: "#e9d5ff",
+              fontSize: "0.74rem",
+              marginLeft: 12,
+              padding: "4px 8px",
+              borderRadius: 6,
+              background: "rgba(168, 85, 247, 0.12)",
+              border: "1px solid rgba(168, 85, 247, 0.3)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 500,
+              boxShadow: "0 0 10px rgba(168, 85, 247, 0.2)",
+            }}
+          >
+            <span className="spinning-gear" style={{ color: C.accent }}>
+              ⚙
+            </span>{" "}
+            {runningJobs.length} writing job(s) running…
           </span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 14 }}>
@@ -186,7 +295,13 @@ export default function Brainstorm() {
       </div>
 
       {/* projects rail */}
-      <div style={{ ...col, borderRight: `1px solid ${C.border}`, overflowY: "auto" }}>
+      <div
+        style={{
+          ...col,
+          borderRight: `1px solid ${C.border}`,
+          overflowY: "auto",
+        }}
+      >
         <div style={groupTitle}>Projects</div>
         {(stories || []).length === 0 ? (
           <div style={{ color: C.dim, fontSize: "0.76rem" }}>
@@ -194,7 +309,11 @@ export default function Brainstorm() {
           </div>
         ) : (
           (stories || []).map((s: any) => (
-            <button key={s.id} style={projectBtn} onClick={() => openProject(s.id)}>
+            <button
+              key={s.id}
+              style={projectBtn}
+              onClick={() => openProject(s.id)}
+            >
               {s.name}
             </button>
           ))
@@ -241,9 +360,22 @@ export default function Brainstorm() {
             placeholder="Optional seed — theme, genre, keywords, a vibe… (blank = range wide)"
             style={seedInput}
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
             <label
-              style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: C.dim }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: "0.8rem",
+                color: C.dim,
+              }}
               title="Grounded realism → visionary/speculative. Always coherent and resonant — never absurd for its own sake."
             >
               Ambition
@@ -259,7 +391,15 @@ export default function Brainstorm() {
               <span style={{ fontSize: "0.66rem" }}>visionary</span>
               <span style={{ color: C.text, width: 28 }}>{wildness}</span>
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: C.dim }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: "0.8rem",
+                color: C.dim,
+              }}
+            >
               How many
               <select
                 value={count}
@@ -291,7 +431,9 @@ export default function Brainstorm() {
             )}
           </div>
           {genError && (
-            <div style={{ color: "#e06c75", fontSize: "0.78rem" }}>⚠ {genError}</div>
+            <div style={{ color: "#e06c75", fontSize: "0.78rem" }}>
+              ⚠ {genError}
+            </div>
           )}
         </div>
 
@@ -308,16 +450,37 @@ export default function Brainstorm() {
           <div style={cardGrid}>
             {ideas.map((idea) => (
               <div key={idea.id} style={ideaCard}>
-                <div style={{ fontSize: "0.95rem", fontWeight: 600, lineHeight: 1.45, marginBottom: 8 }}>
+                <div
+                  style={{
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    lineHeight: 1.45,
+                    marginBottom: 8,
+                  }}
+                >
                   {idea.logline}
                 </div>
                 {(idea.genre || idea.tone) && (
-                  <div style={{ color: C.dim, fontSize: "0.74rem", marginBottom: 8 }}>
+                  <div
+                    style={{
+                      color: C.dim,
+                      fontSize: "0.74rem",
+                      marginBottom: 8,
+                    }}
+                  >
                     {[idea.genre, idea.tone].filter(Boolean).join(" · ")}
                   </div>
                 )}
                 {idea.hook && (
-                  <div style={{ color: "#cbb6e8", fontSize: "0.82rem", fontStyle: "italic", lineHeight: 1.5, marginBottom: 12 }}>
+                  <div
+                    style={{
+                      color: "#cbb6e8",
+                      fontSize: "0.82rem",
+                      fontStyle: "italic",
+                      lineHeight: 1.5,
+                      marginBottom: 12,
+                    }}
+                  >
                     {idea.hook}
                   </div>
                 )}
@@ -343,7 +506,15 @@ export default function Brainstorm() {
       </div>
 
       {/* discussion copilot */}
-      <div style={{ ...col, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", padding: 0 }}>
+      <div
+        style={{
+          ...col,
+          borderLeft: `1px solid ${C.border}`,
+          display: "flex",
+          flexDirection: "column",
+          padding: 0,
+        }}
+      >
         <div
           style={{
             padding: "10px 14px",
@@ -373,7 +544,14 @@ export default function Brainstorm() {
             </div>
           ) : (
             messages.map((m: any) => (
-              <div key={m.id} style={{ margin: "8px 0", fontSize: "0.84rem", lineHeight: 1.5 }}>
+              <div
+                key={m.id}
+                style={{
+                  margin: "8px 0",
+                  fontSize: "0.84rem",
+                  lineHeight: 1.5,
+                }}
+              >
                 <b style={{ color: m.role === "user" ? C.accent : "#7cd992" }}>
                   {m.role === "user" ? "you" : "copilot"}:
                 </b>{" "}
@@ -389,10 +567,19 @@ export default function Brainstorm() {
               </div>
             ))
           )}
-          {busy && <div style={{ color: C.dim, fontSize: "0.8rem" }}>…thinking</div>}
+          {busy && (
+            <div style={{ color: C.dim, fontSize: "0.8rem" }}>…thinking</div>
+          )}
           <div ref={chatEndRef} />
         </div>
-        <div style={{ display: "flex", gap: 8, padding: "8px 12px", borderTop: `1px solid ${C.border}` }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            padding: "8px 12px",
+            borderTop: `1px solid ${C.border}`,
+          }}
+        >
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
