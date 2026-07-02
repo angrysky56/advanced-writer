@@ -1,9 +1,40 @@
+import crypto from "crypto";
 import { aiRouter } from "../ai/router.js";
 import {
   safeParseJson,
   parseDiagnosticBlock,
   type DiagnosticScores,
 } from "../ai/extract.js";
+
+/* ------------------------------------------------------------------ *
+ * Content hashing — lets a saved diagnostic report prove which text it
+ * scored. Manual edits, find_replace, and copilot rewrites change the
+ * scene without re-scoring; a hash mismatch at review time triggers a
+ * fresh score, so the Inspector never shows numbers for prose that no
+ * longer exists.
+ * ------------------------------------------------------------------ */
+
+export function contentHash(text: string): string {
+  return crypto
+    .createHash("sha1")
+    .update(text || "")
+    .digest("hex")
+    .slice(0, 12);
+}
+
+/** Prepend the scored text's hash as an invisible HTML comment. */
+export function stampContentHash(report: string, sceneText: string): string {
+  return `<!-- CONTENT-HASH: ${contentHash(sceneText)} -->\n${report}`;
+}
+
+/** Does this report carry a hash matching the current scene text? */
+export function reportMatchesContent(
+  report: string,
+  sceneText: string,
+): boolean {
+  const m = (report || "").match(/CONTENT-HASH:\s*([0-9a-f]+)/i);
+  return !!m && m[1] === contentHash(sceneText);
+}
 
 /* ------------------------------------------------------------------ *
  * Deterministic line-diff stats — no AI, no deps. Answers "how much of

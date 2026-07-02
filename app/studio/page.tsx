@@ -308,6 +308,13 @@ export default function Studio() {
     "normal",
   );
   const [revisionPlanOpen, setRevisionPlanOpen] = useState<boolean>(true);
+  // Local working copy of the revision plan while the user edits it (null =
+  // pristine, showing the saved plan). Saving writes revision-plan.json — the
+  // exact file apply_storyscope_revisions executes.
+  const [planDraft, setPlanDraft] = useState<any | null>(null);
+  const [planSaving, setPlanSaving] = useState<boolean>(false);
+  const [planMsg, setPlanMsg] = useState<string>("");
+  const [editingPlanIdx, setEditingPlanIdx] = useState<number | null>(null);
   const [issueLedgerOpen, setIssueLedgerOpen] = useState<boolean>(true);
 
   // Refs keep the transport body current without re-creating the chat client.
@@ -440,10 +447,11 @@ export default function Studio() {
   // view isn't a single editable document, e.g. the version-diff view).
   const editableDoc = (): { path: string; content: string } | null => {
     if (!story) return null;
-    if (sel.type === "manuscript")
-      return story.manuscriptPath
-        ? { path: story.manuscriptPath, content: story.manuscript || "" }
-        : null;
+    // The full manuscript is a BUILD ARTIFACT compiled from the scene files —
+    // edits to it are never read by the agents, the next version, or export,
+    // and are overwritten on the next compile. Deliberately NOT editable here;
+    // scenes are the source of truth (open a scene to edit).
+    if (sel.type === "manuscript") return null;
     if (sel.type === "scene") {
       const d = (story.drafts || []).find((x: any) => x.id === sel.id);
       return d?.path ? { path: d.path, content: d.content || "" } : null;
@@ -524,6 +532,53 @@ export default function Studio() {
     setEditing(false);
     setSaveMsg("");
   }, [sel, version, activeId]);
+
+  // ----- Revision plan editing (Inspector panel) -----
+  // planDraft is a local working copy; saving writes revision-plan.json — the
+  // exact file apply_storyscope_revisions executes, so what you edit here is
+  // what the next apply run does.
+  const activePlan = planDraft ?? story?.revisionPlan ?? null;
+  const mutatePlan = (fn: (p: any) => void) => {
+    const base = planDraft ?? story?.revisionPlan;
+    if (!base) return;
+    const next = JSON.parse(JSON.stringify(base));
+    fn(next);
+    setPlanDraft(next);
+    setPlanMsg("");
+  };
+  const savePlan = async () => {
+    if (!planDraft || planSaving) return;
+    setPlanSaving(true);
+    setPlanMsg("");
+    try {
+      const res = await fetch("/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "saveRevisionPlan",
+          storyId: activeId,
+          version: planDraft.source_version,
+          plan: planDraft,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Save failed");
+      setPlanDraft(null);
+      setEditingPlanIdx(null);
+      setPlanMsg("Saved ✓");
+      reload();
+    } catch (e: any) {
+      setPlanMsg(`Save failed: ${e?.message || e}`);
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+  // Discard unsaved plan edits when switching project or version.
+  useEffect(() => {
+    setPlanDraft(null);
+    setEditingPlanIdx(null);
+    setPlanMsg("");
+  }, [activeId, version]);
 
   // Run a deterministic find/replace. apply=false previews; apply=true writes.
   const runFindReplace = async (apply: boolean) => {
@@ -1166,7 +1221,7 @@ export default function Studio() {
               marginTop: 4,
             }}
           >
-            {story.revisionPlan ? (
+            {activePlan ? (
               <>
                 <div
                   style={{
@@ -1174,23 +1229,57 @@ export default function Studio() {
                     gap: 12,
                     fontSize: "0.72rem",
                     color: C.dim,
+                    alignItems: "center",
+                    flexWrap: "wrap",
                   }}
                 >
                   <span>
-                    Source: <b>{story.revisionPlan.source_version}</b>
+                    Source: <b>{activePlan.source_version}</b>
                   </span>
                   <span>
-                    Ops: <b>{story.revisionPlan.revisions?.length || 0}</b>
+                    Ops: <b>{activePlan.revisions?.length || 0}</b>
                   </span>
-                  {story.revisionPlan.unactionable?.length > 0 && (
+                  {activePlan.unactionable?.length > 0 && (
                     <span style={{ color: "#fbbf24" }}>
-                      Needs Human:{" "}
-                      <b>{story.revisionPlan.unactionable.length}</b>
+                      Needs Human: <b>{activePlan.unactionable.length}</b>
+                    </span>
+                  )}
+                  {planDraft && (
+                    <>
+                      <button
+                        style={{ ...actionBtn, padding: "2px 8px" }}
+                        onClick={savePlan}
+                        disabled={planSaving}
+                      >
+                        {planSaving ? "…saving" : "💾 Save plan"}
+                      </button>
+                      <button
+                        style={{ ...actionBtn, padding: "2px 8px" }}
+                        onClick={() => {
+                          setPlanDraft(null);
+                          setEditingPlanIdx(null);
+                          setPlanMsg("");
+                        }}
+                        disabled={planSaving}
+                      >
+                        Discard
+                      </button>
+                    </>
+                  )}
+                  {planMsg && (
+                    <span
+                      style={{
+                        color: planMsg.startsWith("Saved")
+                          ? "#7cd992"
+                          : "#e06c75",
+                      }}
+                    >
+                      {planMsg}
                     </span>
                   )}
                 </div>
 
-                {story.revisionPlan.revisions?.map((rev: any, idx: number) => {
+                {activePlan.revisions?.map((rev: any, idx: number) => {
                   const opColor =
                     rev.op === "rewrite"
                       ? "#c084fc"
@@ -1233,30 +1322,87 @@ export default function Studio() {
                             borderRadius: 3,
                           }}
                         >
-                          {rev.op?.replace("_", " ")}
+                          {rev.op?.replace(/_/g, " ")}
                         </span>
-                        {rev.scene_id && (
-                          <span
-                            style={{
-                              color: C.accent,
-                              fontWeight: 500,
-                              fontSize: "0.72rem",
-                            }}
-                          >
-                            {rev.scene_id}
-                          </span>
-                        )}
-                      </div>
-                      {rev.directive && (
-                        <div
+                        <span
                           style={{
-                            color: C.text,
-                            lineHeight: 1.45,
-                            marginBottom: 2,
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "center",
                           }}
                         >
-                          {rev.directive}
-                        </div>
+                          {rev.scene_id && (
+                            <span
+                              style={{
+                                color: C.accent,
+                                fontWeight: 500,
+                                fontSize: "0.72rem",
+                              }}
+                            >
+                              {rev.scene_id}
+                            </span>
+                          )}
+                          <button
+                            title="Remove this operation from the plan (save to persist)"
+                            onClick={() => {
+                              mutatePlan((p) => {
+                                p.revisions.splice(idx, 1);
+                              });
+                              if (editingPlanIdx === idx)
+                                setEditingPlanIdx(null);
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: C.dim,
+                              cursor: "pointer",
+                              fontSize: "0.85rem",
+                              padding: 0,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      </div>
+                      {editingPlanIdx === idx ? (
+                        <textarea
+                          value={rev.directive || ""}
+                          autoFocus
+                          onChange={(e) =>
+                            mutatePlan((p) => {
+                              p.revisions[idx].directive = e.target.value;
+                            })
+                          }
+                          onBlur={() => setEditingPlanIdx(null)}
+                          style={{
+                            width: "100%",
+                            minHeight: 90,
+                            background: C.panel2,
+                            color: C.text,
+                            border: `1px solid ${C.border}`,
+                            borderRadius: 4,
+                            padding: 6,
+                            fontSize: "0.75rem",
+                            lineHeight: 1.45,
+                            resize: "vertical",
+                          }}
+                        />
+                      ) : (
+                        rev.directive && (
+                          <div
+                            title="Click to edit this directive (save to persist)"
+                            onClick={() => setEditingPlanIdx(idx)}
+                            style={{
+                              color: C.text,
+                              lineHeight: 1.45,
+                              marginBottom: 2,
+                              cursor: "text",
+                            }}
+                          >
+                            {rev.directive}
+                          </div>
+                        )
                       )}
                       {rev.specifics && (
                         <div
@@ -1276,7 +1422,7 @@ export default function Studio() {
                   );
                 })}
 
-                {story.revisionPlan.unactionable?.length > 0 && (
+                {activePlan.unactionable?.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <div
                       style={{
@@ -1290,7 +1436,7 @@ export default function Studio() {
                     >
                       ⚠️ Needs Human Judgment
                     </div>
-                    {story.revisionPlan.unactionable.map(
+                    {activePlan.unactionable.map(
                       (un: any, idx: number) => (
                         <div
                           key={idx}
@@ -1308,6 +1454,31 @@ export default function Studio() {
                             <b style={{ color: "#fbbf24" }}>{un.issue_id}: </b>
                           )}
                           {un.reason}
+                          <textarea
+                            value={un.resolution || ""}
+                            placeholder="Your decision (this is what was asked of you) — e.g. 'Keep the early revelation; tighten the middle instead' or 'Add the mailing scene after scene_15'. Save plan; the next Apply decomposes this into operations."
+                            onChange={(e) =>
+                              mutatePlan((p) => {
+                                p.unactionable[idx].resolution =
+                                  e.target.value;
+                              })
+                            }
+                            style={{
+                              width: "100%",
+                              minHeight: 56,
+                              marginTop: 6,
+                              background: C.panel2,
+                              color: C.text,
+                              border: un.resolution?.trim()
+                                ? "1px solid rgba(124, 217, 146, 0.4)"
+                                : "1px solid rgba(251, 191, 36, 0.25)",
+                              borderRadius: 4,
+                              padding: 6,
+                              fontSize: "0.72rem",
+                              lineHeight: 1.4,
+                              resize: "vertical",
+                            }}
+                          />
                         </div>
                       ),
                     )}
@@ -1829,7 +2000,9 @@ export default function Studio() {
                 ? `scene · ${sel.id}`
                 : sel.type === "character"
                   ? `character · ${sel.id}`
-                  : "project"}
+                  : sel.type === "manuscript"
+                    ? "manuscript · compiled from scenes (read-only — edit scenes)"
+                    : "project"}
             </span>
           </div>
         </div>

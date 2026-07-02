@@ -21,6 +21,7 @@
 
 1. The review's final artifact is the compiled revision plan: `storyscope-reports/<version>/revision-plan.json` — the concrete list of operations (op, scene, directive, verbatim lens specifics, unactionable items) that apply will execute. Present the Executive Summary AND this plan to the user; the plan is what they approve, and it is directly editable (in the Studio or by hand).
 2. The user may accept the plan as-is (just run apply — it executes the saved plan), edit the JSON file directly, or dictate changes: captured as directive objects `{ scene_id, directive, op?, merge_with?, after_scene?, issue_id?, specifics? }` passed via `directives` (which overrides the saved plan). Rejected scenes go in `exclude_scenes`.
+3. NEEDS-HUMAN items carry a `resolution` field: the author types their decision (in the Studio panel or the JSON). At apply time, every resolved item is DECOMPOSED into concrete operations — the author supplies the judgment, the machine does the decomposition. Unresolved items remain honestly reported in the coverage.
 
 ### 3. Apply Prose Revisions
 

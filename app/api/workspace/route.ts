@@ -474,7 +474,44 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { path: newPath, action, projectName } = await req.json();
+    const {
+      path: newPath,
+      action,
+      projectName,
+      storyId,
+      version: bodyVersion,
+      plan,
+    } = await req.json();
+
+    // Persist a user-edited revision plan (the Inspector's Revision Plan panel).
+    // apply_storyscope_revisions executes this file, so edits here are exactly
+    // what the next apply run does.
+    if (action === "saveRevisionPlan") {
+      if (
+        !storyId ||
+        !/^[a-z0-9_-]+$/i.test(storyId) ||
+        !plan ||
+        !/^v\d+$/.test(String(bodyVersion || ""))
+      ) {
+        return NextResponse.json(
+          { error: "storyId, version (vN) and plan are required." },
+          { status: 400 },
+        );
+      }
+      const dir = path.join(
+        getWorkspaceDir(),
+        storyId,
+        "storyscope-reports",
+        String(bodyVersion),
+      );
+      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(dir, "revision-plan.json"),
+        JSON.stringify(plan, null, 2),
+        "utf8",
+      );
+      return NextResponse.json({ ok: true });
+    }
 
     if (action === "createProject") {
       if (!projectName) {

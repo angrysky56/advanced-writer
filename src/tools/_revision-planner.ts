@@ -26,7 +26,10 @@ export interface RevisionPlan {
   source_version: string;
   generated_at: string;
   revisions: RevisionPlanItem[];
-  unactionable: { issue_id?: string; reason?: string }[];
+  /** Items deferred to human judgment. The Studio lets the author type a
+   *  'resolution' (their decision); apply_storyscope_revisions decomposes any
+   *  resolved item into concrete operations at apply time. */
+  unactionable: { issue_id?: string; reason?: string; resolution?: string }[];
 }
 
 /**
@@ -150,7 +153,9 @@ HARD RULES:
 2. Give every item a short stable kebab-case "issue_id" — REUSE the id from the ISSUE LEDGER when it is the same underlying issue.
 3. Scenes that already work must NOT be touched.
 4. CONVERGENCE: do NOT cut or gut something a previous round deliberately added, and do NOT re-add what a previous round deliberately cut, unless the critique EXPLICITLY says the previous decision was wrong — in that case prefix the directive with "REVERSAL:" and quote the critique's justification. When two critique items conflict (e.g. "compress the denouement" vs "keep the closure scene"), resolve the conflict yourself in favor of the more specific item and note the tradeoff in the directive — do not execute both halves of a contradiction.
-5. "unactionable" is a LAST RESORT — only for issues that genuinely no operation can express (e.g. "re-outline the middle third"). Global style passes are global_line_edit. Missing scenes are add_scene. Placement judgment calls: choose the best placement yourself and state it. NEVER list an issue as unactionable while also emitting an operation for it.
+5. "unactionable" is a LAST RESORT — only for pure taste decisions where no option is clearly better. Global style passes are global_line_edit. Missing scenes are add_scene. Placement judgment calls: choose the best placement yourself and state it. NEVER list an issue as unactionable while also emitting an operation for it.
+6. Prior rounds' "needs-human"/"unactionable" classifications in the ISSUE LEDGER DO NOT bind you — the operation set has grown since they were written. Re-evaluate every open issue against the CURRENT six operations. Verb-tense drag, thematic over-explication, stylistic crutches, and over-repeated motif descriptions are ALWAYS global_line_edit now — never unactionable, never "requires an authorial pass": finding every instance and rewriting it line-by-line is exactly what global_line_edit does.
+7. STRUCTURAL issues (revelation timing, restructuring an act, re-sequencing the middle) — do NOT punt. Decompose YOUR best structural solution into a concrete sequence of operations (cut/merge/add/rewrite items sharing an issue_id prefix, e.g. "curiosity-spiral-1", "curiosity-spiral-2"), each directive stating its role in the restructure and the intended event order. If you genuinely cannot choose between two structural solutions, the "unactionable" reason MUST present both options concretely with your recommendation — the author decides between real choices, never receives a blank "requires authorial judgment".
 
 Output ONLY JSON:
 { "revisions": [ { "issue_id": "...", "op": "rewrite|line_edit|global_line_edit|cut_scene|merge_scenes|add_scene", "scene_id": "scene_3 (or \\"all\\" for global_line_edit)", "merge_with": "(merge only)", "after_scene": "(add only)", "directive": "the specific change", "specifics": "verbatim lens-report excerpts to honor" } ],

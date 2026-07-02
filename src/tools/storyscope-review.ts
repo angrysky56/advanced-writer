@@ -4,8 +4,12 @@ import { fileURLToPath } from "url";
 import { aiRouter } from "../ai/router.js";
 import { workspaceExporter } from "../storage/workspace.js";
 import { neo4jStorage } from "../storage/neo4j.js";
-import { safeParseJson } from "../ai/extract.js";
-import { diagnosticsDigest } from "./_revision-support.js";
+import { safeParseJson, DIAGNOSTIC_SCORE_BLOCK } from "../ai/extract.js";
+import {
+  diagnosticsDigest,
+  reportMatchesContent,
+  stampContentHash,
+} from "./_revision-support.js";
 import { buildAndSaveRevisionPlan } from "./_revision-planner.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,10 +58,18 @@ export async function executeStoryscopeFinalReview(args: any) {
       : 1;
     const version = args.version || (versions.length ? `v${latestNum}` : "v1");
 
-    const manuscript = await workspaceExporter.readManuscript(
-      story_id,
-      version,
-    );
+    // SCENE DRAFTS ARE THE SOURCE OF TRUTH. Recompile the manuscript from the
+    // version's scene files before reviewing, so manual edits, copilot
+    // rewrites, and find_replace changes are always what gets reviewed — the
+    // compiled final_manuscript.md is a build artifact, not an editable doc,
+    // and may be stale. Fall back to the compiled file only if no drafts exist.
+    let manuscript = await workspaceExporter.readAllDrafts(story_id, version);
+    if (manuscript && manuscript.trim()) {
+      await workspaceExporter.saveManuscript(story_id, manuscript, version);
+    } else {
+      manuscript =
+        (await workspaceExporter.readManuscript(story_id, version)) || "";
+    }
     if (!manuscript) {
       return {
         content: [
@@ -68,6 +80,44 @@ export async function executeStoryscopeFinalReview(args: any) {
         ],
         isError: true,
       };
+    }
+
+    // STALE-DIAGNOSTIC REFRESH: re-score any scene whose text changed since
+    // its last neuro-critique (manual edits, find_replace, copilot rewrites
+    // don't trigger a re-score at edit time). Each saved report carries a
+    // content hash of the text it scored; absence or mismatch => fresh score.
+    // Runs in parallel, best-effort — a failed score never blocks the review.
+    try {
+      const sceneFiles = await workspaceExporter.listDrafts(story_id, version);
+      await Promise.allSettled(
+        sceneFiles.map(async (f) => {
+          const sceneId = f.replace(".md", "");
+          const text = await workspaceExporter.readDraft(
+            story_id,
+            sceneId,
+            version,
+          );
+          if (!text) return;
+          const existing = await workspaceExporter.readDiagnosticReport(
+            story_id,
+            sceneId,
+          );
+          if (existing && reportMatchesContent(existing, text)) return;
+          const out = await aiRouter.generateCompletion({
+            taskType: "diagnostic",
+            systemPrompt: `Analyze the following scene for emotional pacing (cortisol, oxytocin, dopamine), pathology diagnostics, and agency enforcement. Produce a structured neuro-critique report.\nScene:\n${text}${DIAGNOSTIC_SCORE_BLOCK}`,
+            userMessage: "Provide the neuro-critique report.",
+          });
+          if (out && out.trim())
+            await workspaceExporter.saveDiagnosticReport(
+              story_id,
+              sceneId,
+              stampContentHash(out, text),
+            );
+        }),
+      );
+    } catch {
+      /* diagnostics refresh is best-effort */
     }
 
     const architecture =

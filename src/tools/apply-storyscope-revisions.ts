@@ -10,6 +10,7 @@ import {
   applyAnchoredEdits,
   issueSlug,
   diagnosticDelta,
+  stampContentHash,
   type AnchoredEdit,
   type VerifyResult,
 } from "./_revision-support.js";
@@ -311,7 +312,15 @@ export async function executeApplyStoryscopeRevisions(args: any) {
       }
       if (plan && Array.isArray(plan.revisions)) rawItems = plan.revisions;
       if (plan && Array.isArray(plan.unactionable)) {
+        // AUTHOR DECISIONS: needs-human items where the user typed a
+        // 'resolution' in the Studio are DECOMPOSED here into concrete
+        // operations — the human supplies the judgment, the machine does the
+        // decomposition. Items without a resolution stay honestly reported.
+        const resolved = plan.unactionable.filter(
+          (u: any) => u && typeof u.resolution === "string" && u.resolution.trim(),
+        );
         for (const u of plan.unactionable) {
+          if (resolved.includes(u)) continue;
           coverage.push({
             issueId: String(u?.issue_id || "unknown"),
             op: "-",
@@ -319,6 +328,63 @@ export async function executeApplyStoryscopeRevisions(args: any) {
             status: "unactionable",
             detail: String(u?.reason || "planner gave no reason"),
           });
+        }
+        if (resolved.length > 0) {
+          let decomposed = false;
+          try {
+            const excerptLines: string[] = [];
+            for (const sceneId of sceneIds) {
+              let t = await workspaceExporter.readDraft(
+                story_id,
+                sceneId,
+                source_version,
+              );
+              if (!t)
+                t = await workspaceExporter.readDraft(story_id, sceneId, "v1");
+              if (t)
+                excerptLines.push(
+                  `${sceneId} :: ${t.slice(0, 300).replace(/\s+/g, " ").trim()}`,
+                );
+            }
+            const resp = await aiRouter.generateCompletion({
+              taskType: "diagnostic",
+              systemPrompt: `The AUTHOR has made a binding decision on issues an earlier planner deferred to human judgment. Convert EACH decision into concrete operations using: "rewrite" | "line_edit" | "global_line_edit" (scene_id "all") | "cut_scene" | "merge_scenes" (+merge_with) | "add_scene" (+after_scene). The decision text is LAW — decompose it faithfully, do not re-litigate or soften it. Multiple operations per decision are fine (share the issue_id with -1, -2 suffixes). Output ONLY JSON:
+{ "revisions": [ { "issue_id": "...", "op": "...", "scene_id": "...", "merge_with": "", "after_scene": "", "directive": "the specific change implementing the decision", "specifics": "any concrete details from the decision or issue" } ] }
+
+=== AUTHOR DECISIONS ===
+${resolved.map((u: any) => `- [${u.issue_id || "unknown"}] original issue: ${u.reason || "(none)"}\n  AUTHOR'S DECISION: ${u.resolution}`).join("\n\n")}
+
+=== EXECUTIVE SUMMARY (context) ===
+${summaryContext}
+
+=== SCENES (id :: opening excerpt) ===
+${excerptLines.join("\n")}`,
+              userMessage: "Output the operations as JSON.",
+            });
+            const parsed = safeParseJson<any>(resp);
+            if (
+              parsed &&
+              Array.isArray(parsed.revisions) &&
+              parsed.revisions.length > 0
+            ) {
+              rawItems = rawItems.concat(parsed.revisions);
+              decomposed = true;
+            }
+          } catch {
+            decomposed = false;
+          }
+          if (!decomposed) {
+            for (const u of resolved) {
+              coverage.push({
+                issueId: String(u?.issue_id || "unknown"),
+                op: "-",
+                scene: "-",
+                status: "failed",
+                detail:
+                  "author decision recorded but could not be decomposed into operations — re-run apply, or add the ops to the plan manually",
+              });
+            }
+          }
         }
       }
     }
@@ -619,7 +685,11 @@ export async function executeApplyStoryscopeRevisions(args: any) {
           userMessage: "Provide the updated neuro-critique report.",
         });
         if (out && out.trim()) {
-          await workspaceExporter.saveDiagnosticReport(story_id, sceneId, out);
+          await workspaceExporter.saveDiagnosticReport(
+            story_id,
+            sceneId,
+            stampContentHash(out, text),
+          );
           return diagnosticDelta(previous, out);
         }
         return "diagnostic: re-score returned empty (non-fatal)";
