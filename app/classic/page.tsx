@@ -57,6 +57,7 @@ export default function Brainstorm() {
   const busy = status === "submitted" || status === "streaming";
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [chatExpanded, setChatExpanded] = useState<boolean>(false);
 
   useEffect(() => {
     initWorkspace();
@@ -157,7 +158,13 @@ export default function Brainstorm() {
   const runningJobs = (jobs || []).filter((j: any) => j.status === "running");
 
   return (
-    <div style={shell}>
+    <div
+      style={{
+        ...shell,
+        gridTemplateColumns: chatExpanded ? "260px 1fr 600px" : "260px 1fr 380px",
+        transition: "grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}
+    >
       {/* header */}
       <div style={header}>
         <span style={{ fontWeight: 700, color: C.accent }}>
@@ -337,8 +344,25 @@ export default function Brainstorm() {
 
       {/* discussion copilot */}
       <div style={{ ...col, borderLeft: `1px solid ${C.border}`, display: "flex", flexDirection: "column", padding: 0 }}>
-        <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, fontWeight: 600, fontSize: "0.82rem" }}>
-          Discuss
+        <div
+          style={{
+            padding: "10px 14px",
+            borderBottom: `1px solid ${C.border}`,
+            fontWeight: 600,
+            fontSize: "0.82rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Discuss</span>
+          <button
+            style={tinyBtn}
+            onClick={() => setChatExpanded(!chatExpanded)}
+            title={chatExpanded ? "Shrink panel" : "Expand panel"}
+          >
+            {chatExpanded ? "⤡ Shrink" : "⤢ Expand"}
+          </button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
           {messages.length === 0 ? (

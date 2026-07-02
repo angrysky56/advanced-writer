@@ -289,6 +289,7 @@ export default function Studio() {
   // ACT (call the drafting tools) by default rather than interview the user.
   // Users can still toggle to Brainstorm for discovery conversations.
   const [copilotMode, setCopilotMode] = useState<"brainstorm" | "draft">("draft");
+  const [copilotHeight, setCopilotHeight] = useState<"normal" | "expanded">("normal");
 
   // Refs keep the transport body current without re-creating the chat client.
   const activeIdRef = useRef(activeId);
@@ -1150,7 +1151,13 @@ export default function Studio() {
           )}
         </div>
         {/* copilot rail */}
-        <div style={rail}>
+        <div
+          style={{
+            ...rail,
+            height: copilotHeight === "normal" ? 220 : 550,
+            transition: "height 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -1195,6 +1202,13 @@ export default function Studio() {
               title={`Mode: ${copilotMode}. Click to switch.`}
             >
               {copilotMode === "brainstorm" ? "💡 Brainstorm" : "✎ Draft"}
+            </button>
+            <button
+              style={railBtn}
+              onClick={() => setCopilotHeight(copilotHeight === "normal" ? "expanded" : "normal")}
+              title={copilotHeight === "normal" ? "Expand panel" : "Collapse panel"}
+            >
+              {copilotHeight === "normal" ? "↕ Expand" : "↕ Shrink"}
             </button>
           </div>
           {(() => {
