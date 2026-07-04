@@ -32,17 +32,70 @@ export interface RevisionPlan {
   unactionable: { issue_id?: string; reason?: string; resolution?: string }[];
 }
 
+/** Salvage complete items from a truncated/malformed planner response: walk
+ *  the "revisions" array by brace depth and JSON.parse each complete object,
+ *  so one truncated tail item doesn't discard an otherwise good plan. */
+export function salvageRevisions(raw: string): RevisionPlanItem[] {
+  const idx = (raw || "").indexOf('"revisions"');
+  if (idx === -1) return [];
+  const start = raw.indexOf("[", idx);
+  if (start === -1) return [];
+  const items: RevisionPlanItem[] = [];
+  let depth = 0;
+  let objStart = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = start + 1; i < raw.length; i++) {
+    const ch = raw[i];
+    if (esc) {
+      esc = false;
+      continue;
+    }
+    if (ch === "\\") {
+      esc = true;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = !inStr;
+      continue;
+    }
+    if (inStr) continue;
+    if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && objStart !== -1) {
+        try {
+          items.push(JSON.parse(raw.slice(objStart, i + 1)));
+        } catch {
+          /* skip incomplete item */
+        }
+        objStart = -1;
+      }
+    } else if (ch === "]" && depth === 0) {
+      break;
+    }
+  }
+  return items;
+}
+
 /**
  * Build the revision plan for a reviewed version from: the Executive Summary,
  * all specialist lens reports, the per-scene diagnostics digest, the issue
  * ledger + previous round's changelog (convergence context), and per-scene
- * opening excerpts. Saves the plan next to the review. Returns null when no
- * review or no scenes exist. Fail-open — callers treat null as "no plan yet".
+ * opening excerpts. Saves the plan next to the review.
+ *
+ * Robustness (a silent failure here left v16 with a review but NO plan):
+ * inputs are capped (lens reports, summary, ledger digest all grow across
+ * rounds); compilation retries once with tighter caps + a brevity order; a
+ * truncated response is SALVAGED item-by-item; and the returned note states
+ * exactly what happened so callers surface it instead of swallowing it.
  */
 export async function buildAndSaveRevisionPlan(
   story_id: string,
   source_version: string,
-): Promise<RevisionPlan | null> {
+): Promise<{ plan: RevisionPlan | null; note: string }> {
   const executiveSummary =
     await workspaceExporter.readStoryscopeExecutiveSummary(
       story_id,
@@ -56,16 +109,26 @@ export async function buildAndSaveRevisionPlan(
     !(executiveSummary && executiveSummary.trim()) &&
     lensReports.length === 0
   )
-    return null;
+    return { plan: null, note: `no review found for ${source_version}` };
 
-  const summaryContext =
+  // INPUT CAPS: these documents grow every round (v16's lens reports totalled
+  // ~200KB); uncapped they overflow the planning model and the compile dies.
+  const summaryContext = (
     executiveSummary && executiveSummary.trim()
       ? executiveSummary
-      : "(No executive summary file found — plan from the specialist lens reports directly.)";
-  const lensContext =
+      : "(No executive summary file found — plan from the specialist lens reports directly.)"
+  ).slice(0, 20000);
+  const lensBlock = (capPerLens: number) =>
     lensReports.length > 0
       ? lensReports
-          .map((r) => `## LENS: ${r.aspect.toUpperCase()}\n${r.content}`)
+          .map(
+            (r) =>
+              `## LENS: ${r.aspect.toUpperCase()}\n${
+                r.content.length > capPerLens
+                  ? `${r.content.slice(0, capPerLens)}\n[...lens truncated for planning...]`
+                  : r.content
+              }`,
+          )
           .join("\n\n")
       : "(no specialist lens reports found)";
 
@@ -78,7 +141,8 @@ export async function buildAndSaveRevisionPlan(
     .sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
     );
-  if (sceneIds.length === 0) return null;
+  if (sceneIds.length === 0)
+    return { plan: null, note: "no scene drafts found" };
   const excerpts: { sceneId: string; excerpt: string }[] = [];
   for (const sceneId of sceneIds) {
     let text = await workspaceExporter.readDraft(
@@ -94,7 +158,8 @@ export async function buildAndSaveRevisionPlan(
       excerpt: text.slice(0, 400).replace(/\s+/g, " ").trim(),
     });
   }
-  if (excerpts.length === 0) return null;
+  if (excerpts.length === 0)
+    return { plan: null, note: "no readable scene drafts" };
 
   // CONVERGENCE CONTEXT: what previous rounds deliberately did. Without this
   // the planner flip-flops (v13 added the Takehiko closure scene, v14's
@@ -102,15 +167,24 @@ export async function buildAndSaveRevisionPlan(
   let planHistory = "";
   try {
     const ledger = await workspaceExporter.readIssueLedger(story_id);
-    const recent = (ledger.issues || [])
-      .filter((i: any) => Array.isArray(i.history) && i.history.length)
-      .map((i: any) => {
-        const h = i.history
-          .slice(-2)
-          .map((x: any) => `${x.version}: ${x.event}`)
-          .join(" | ");
-        return `- [${i.id}] (${i.status}) ${h}`;
-      })
+    // Cap the ledger digest: it grows every round (90 issues by v16). The
+    // planner needs all UNRESOLVED issues but only a sample of resolved ones
+    // (enough to avoid re-litigating).
+    const withHistory = (ledger.issues || []).filter(
+      (i: any) => Array.isArray(i.history) && i.history.length,
+    );
+    const fmtIssue = (i: any) => {
+      const h = i.history
+        .slice(-2)
+        .map((x: any) => `${x.version}: ${x.event}`)
+        .join(" | ");
+      return `- [${i.id}] (${i.status}) ${h}`;
+    };
+    const recent = [
+      ...withHistory.filter((i: any) => i.status !== "resolved").slice(-60),
+      ...withHistory.filter((i: any) => i.status === "resolved").slice(-15),
+    ]
+      .map(fmtIssue)
       .join("\n");
     const prevChangelog = await workspaceExporter.readStoryscopeChangelog(
       story_id,
@@ -136,7 +210,10 @@ export async function buildAndSaveRevisionPlan(
     diagContext = "";
   }
 
-  const planPrompt = `You are an editorial planner. The AUTHOR'S INTENT IS PRIMARY and the manuscript is the living work; the Architecture Brief / World Bible are only earlier planning drafts. Flag work ONLY for genuine CRAFT problems — the story contradicting ITSELF, an arc that doesn't pay off, pacing/clarity failures, weak execution. DO NOT flag a scene merely because it diverges from the planning documents (canon updates belong to reconcile_storyscope_canon, not here).
+  const buildPrompt = (
+    lensCap: number,
+    extra: string,
+  ) => `You are an editorial planner. The AUTHOR'S INTENT IS PRIMARY and the manuscript is the living work; the Architecture Brief / World Bible are only earlier planning drafts. Flag work ONLY for genuine CRAFT problems — the story contradicting ITSELF, an arc that doesn't pay off, pacing/clarity failures, weak execution. DO NOT flag a scene merely because it diverges from the planning documents (canon updates belong to reconcile_storyscope_canon, not here).
 
 You have SIX operations. Choose the one that actually executes each critique item:
 - "rewrite": full-scene revision — for pacing, structure, POV, or emotional-beat problems within ONE scene.
@@ -165,23 +242,54 @@ Output ONLY JSON:
 ${summaryContext}
 
 === SPECIALIST LENS REPORTS ===
-${lensContext}${diagContext}${planHistory}
+${lensBlock(lensCap)}${diagContext}${planHistory}
 
 === SCENES (id :: opening excerpt) ===
-${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
+${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}${extra}`;
 
+  // Two attempts: full-fat, then tighter inputs + a brevity order (covers both
+  // failure modes — input overflow and truncated output).
+  const attempts = [
+    { lensCap: 12000, extra: "" },
+    {
+      lensCap: 4000,
+      extra:
+        "\n\nIMPORTANT: a previous attempt produced unparseable (likely truncated) output. Keep the TOTAL output compact: at most 25 revision items, each 'specifics' under 250 characters, no prose outside the JSON object.",
+    },
+  ];
   let parsed: any = null;
-  try {
-    const resp = await aiRouter.generateCompletion({
-      taskType: "diagnostic",
-      systemPrompt: planPrompt,
-      userMessage: "Output the revision plan as JSON.",
-    });
-    parsed = safeParseJson<any>(resp);
-  } catch {
-    parsed = null;
+  let salvaged = false;
+  let lastErr = "planner returned unparseable or empty output";
+  for (const a of attempts) {
+    try {
+      const resp = await aiRouter.generateCompletion({
+        taskType: "diagnostic",
+        systemPrompt: buildPrompt(a.lensCap, a.extra),
+        userMessage: "Output the revision plan as JSON.",
+      });
+      parsed = safeParseJson<any>(resp);
+      if (!parsed || !Array.isArray(parsed.revisions)) {
+        const items = salvageRevisions(resp || "");
+        if (items.length > 0) {
+          parsed = { revisions: items, unactionable: [] };
+          salvaged = true;
+        } else {
+          parsed = null;
+        }
+      }
+      if (parsed && Array.isArray(parsed.revisions) && parsed.revisions.length)
+        break;
+      parsed = null;
+    } catch (e: any) {
+      lastErr = e?.message || String(e);
+      parsed = null;
+    }
   }
-  if (!parsed || !Array.isArray(parsed.revisions)) return null;
+  if (!parsed)
+    return {
+      plan: null,
+      note: `plan compilation failed after ${attempts.length} attempts: ${lastErr}`,
+    };
 
   const plan: RevisionPlan = {
     story_id,
@@ -192,8 +300,104 @@ ${excerpts.map((e) => `${e.sceneId} :: ${e.excerpt}`).join("\n\n")}`;
   };
   try {
     await workspaceExporter.saveRevisionPlan(story_id, source_version, plan);
-  } catch {
-    /* plan file is best-effort; the returned object still works */
+  } catch (e: any) {
+    return {
+      plan,
+      note: `plan compiled but SAVING FAILED: ${e?.message || e}`,
+    };
   }
-  return plan;
+  return {
+    plan,
+    note: `compiled ${plan.revisions.length} operation(s)${plan.unactionable.length ? ` + ${plan.unactionable.length} needs-human item(s)` : ""}${salvaged ? " (salvaged from truncated planner output — review the plan for missing tail items)" : ""}`,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Standalone recovery/regeneration tool: (re)compile the plan from an
+ * EXISTING review without re-running the lenses. Exists because a
+ * failed compile used to leave a finished review with no plan and no
+ * cheap way to get one.
+ * ------------------------------------------------------------------ */
+
+export const compileRevisionPlanDef = {
+  name: "compile_revision_plan",
+  description:
+    "(Re)compile the revision plan from an EXISTING StoryScope review — no lenses are re-run, so this is fast and cheap. Use when a review finished but its plan failed to compile, or to regenerate the plan after review reports were edited. Overwrites storyscope-reports/<version>/revision-plan.json (the file the Studio panel shows and apply_storyscope_revisions executes).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      story_id: { type: "string", description: "Identifier for the story" },
+      version: {
+        type: "string",
+        description:
+          "Reviewed version whose plan to compile (default: the latest version that has a review on disk)",
+      },
+    },
+    required: ["story_id"],
+  },
+};
+
+export async function executeCompileRevisionPlan(args: any) {
+  try {
+    const story_id = args.story_id;
+    let version = args.version as string | undefined;
+    if (!version) {
+      const versions = await workspaceExporter.listDraftVersions(story_id);
+      for (const v of versions.slice().reverse()) {
+        const summary = await workspaceExporter.readStoryscopeExecutiveSummary(
+          story_id,
+          v,
+        );
+        const lenses = await workspaceExporter.readAllStoryscopeReports(
+          story_id,
+          v,
+        );
+        if ((summary && summary.trim()) || lenses.length > 0) {
+          version = v;
+          break;
+        }
+      }
+    }
+    if (!version) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: no version of ${story_id} has a StoryScope review on disk. Run storyscope_final_review first.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    const { plan, note } = await buildAndSaveRevisionPlan(story_id, version);
+    if (!plan) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to compile revision plan for ${version}: ${note}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Revision plan for ${version}: ${note}. Saved to storyscope-reports/${version}/revision-plan.json — review/edit it in the Studio, then run apply_storyscope_revisions.`,
+        },
+      ],
+    };
+  } catch (error: any) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error compiling revision plan: ${error.message}`,
+        },
+      ],
+      isError: true,
+    };
+  }
 }

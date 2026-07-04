@@ -485,13 +485,12 @@ ${known || "(none yet)"}`,
     // is exactly what runs — no re-planning at apply time.
     let planNote = "";
     try {
-      const plan = await buildAndSaveRevisionPlan(story_id, version);
-      if (plan) {
-        planNote = ` Revision plan compiled: ${plan.revisions.length} operation(s)${plan.unactionable.length ? ` + ${plan.unactionable.length} needs-human item(s)` : ""} saved to storyscope-reports/${version}/revision-plan.json — review/edit it, then run apply_storyscope_revisions (it executes this plan).`;
-      }
-    } catch {
-      planNote =
-        " (Revision plan compilation failed — apply_storyscope_revisions will auto-plan instead.)";
+      const { plan, note } = await buildAndSaveRevisionPlan(story_id, version);
+      planNote = plan
+        ? ` Revision plan: ${note}. Saved to storyscope-reports/${version}/revision-plan.json — review/edit it, then run apply_storyscope_revisions (it executes this plan).`
+        : ` ⚠ REVISION PLAN COMPILATION FAILED: ${note}. The review itself is intact — run compile_revision_plan to retry (fast; no lenses are re-run).`;
+    } catch (e: any) {
+      planNote = ` ⚠ REVISION PLAN COMPILATION FAILED: ${e?.message || e}. The review itself is intact — run compile_revision_plan to retry (fast; no lenses are re-run).`;
     }
 
     return {

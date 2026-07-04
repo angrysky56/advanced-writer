@@ -308,7 +308,7 @@ export async function executeApplyStoryscopeRevisions(args: any) {
       if (plan && Array.isArray(plan.revisions)) {
         planSource = "saved-plan";
       } else {
-        plan = await buildAndSaveRevisionPlan(story_id, source_version);
+        plan = (await buildAndSaveRevisionPlan(story_id, source_version)).plan;
       }
       if (plan && Array.isArray(plan.revisions)) rawItems = plan.revisions;
       if (plan && Array.isArray(plan.unactionable)) {

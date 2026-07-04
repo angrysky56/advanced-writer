@@ -40,6 +40,10 @@ import {
   reconcileStoryscopeCanonDef,
   executeReconcileStoryscopeCanon,
 } from "./reconcile-storyscope-canon.js";
+import {
+  compileRevisionPlanDef,
+  executeCompileRevisionPlan,
+} from "./_revision-planner.js";
 import { findReplaceDef, executeFindReplace } from "./find-replace.js";
 import { brainstormDef, executeBrainstorm } from "./brainstorm.js";
 import { publishStoryDef, executePublishStory } from "./publish-story.js";
@@ -80,6 +84,7 @@ export const ALL_TOOLS = [
   expandToNovelDef,
   storyscopeFinalReviewDef,
   applyStoryscopeRevisionsDef,
+  compileRevisionPlanDef,
   reconcileStoryscopeCanonDef,
   findReplaceDef,
   brainstormDef,
@@ -171,6 +176,8 @@ async function dispatch(name: string, args: any) {
       return executeStoryscopeFinalReview(args);
     case "apply_storyscope_revisions":
       return executeApplyStoryscopeRevisions(args);
+    case "compile_revision_plan":
+      return executeCompileRevisionPlan(args);
     case "reconcile_storyscope_canon":
       return executeReconcileStoryscopeCanon(args);
     case "find_replace":
