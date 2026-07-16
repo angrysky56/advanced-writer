@@ -136,6 +136,7 @@ export default function ChatPage() {
   const [modelBrain, setModelBrain] = useState<string>("default");
   const [modelDefaults, setModelDefaults] = useState<any>({});
   const [openrouterModels, setOpenrouterModels] = useState<any[]>([]);
+  const [refiantModels, setRefiantModels] = useState<any[]>([]);
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
   const [showModelConfig, setShowModelConfig] = useState<boolean>(false);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -248,6 +249,7 @@ export default function ChatPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.openrouter) setOpenrouterModels(data.openrouter);
+        if (data.refiant) setRefiantModels(data.refiant);
         if (data.ollama) setOllamaModels(data.ollama);
         if (data.defaults) setModelDefaults(data.defaults);
       })
@@ -1356,6 +1358,13 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                     ))}
                   </optgroup>
                 )}
+                {refiantModels.length > 0 && (
+                  <optgroup label="Refiant Models" style={{ background: "#1f1f2e" }}>
+                    {refiantModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name.replace("refiant/", "")}</option>
+                    ))}
+                  </optgroup>
+                )}
                 {ollamaModels.length > 0 && (
                   <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
                     {ollamaModels.map((m) => (
@@ -1395,6 +1404,13 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                     ))}
                   </optgroup>
                 )}
+                {refiantModels.length > 0 && (
+                  <optgroup label="Refiant Models" style={{ background: "#1f1f2e" }}>
+                    {refiantModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name.replace("refiant/", "")}</option>
+                    ))}
+                  </optgroup>
+                )}
                 {ollamaModels.length > 0 && (
                   <optgroup label="Ollama Models (Local)" style={{ background: "#1f1f2e" }}>
                     {ollamaModels.map((m) => (
@@ -1431,6 +1447,13 @@ ${toolFormState.rewriteSource === "paste" ? `- scene_text: "${toolFormState.rewr
                   <optgroup label="OpenRouter Models" style={{ background: "#1f1f2e" }}>
                     {openrouterModels.map((m) => (
                       <option key={m.id} value={m.id}>{m.name.replace("openrouter/", "")}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {refiantModels.length > 0 && (
+                  <optgroup label="Refiant Models" style={{ background: "#1f1f2e" }}>
+                    {refiantModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name.replace("refiant/", "")}</option>
                     ))}
                   </optgroup>
                 )}

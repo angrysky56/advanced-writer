@@ -10,6 +10,8 @@ config({ path: join(__dirname, "../.env"), quiet: true });
 
 const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
+  REFIANT_API_KEY: z.string().optional(),
+  REFIANT_BASE_URL: z.string().default("https://api.refiant.ai/v1"),
   OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
   OLLAMA_EMBEDDING_MODEL: z.string().default("nomic-embed-text:latest"),
   MODEL_GENERATION: z.string(),

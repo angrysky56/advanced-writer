@@ -1,6 +1,7 @@
 import { ENV } from "../config.js";
 import { ollamaClient } from "./ollama.js";
 import { openRouterClient } from "./openrouter.js";
+import { refiantClient } from "./refiant.js";
 import { TaskType } from "../types/workflow.js";
 
 interface CompletionRequest {
@@ -59,6 +60,13 @@ export class AIRouter {
       );
     } else if (provider === "openrouter") {
       return openRouterClient.generateCompletion(
+        model,
+        request.systemPrompt,
+        request.userMessage,
+        temperature,
+      );
+    } else if (provider === "refiant") {
+      return refiantClient.generateCompletion(
         model,
         request.systemPrompt,
         request.userMessage,

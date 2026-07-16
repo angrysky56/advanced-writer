@@ -51,7 +51,15 @@ export async function GET() {
     );
   }
 
-  // 2. Fetch Ollama models
+  // 2. Refiant models (Protea long-context series). No public list endpoint
+  // is documented, so these are the known model slugs from console.refiant.ai.
+  const refiantModels: { id: string; name: string }[] = [
+    { id: "refiant/protea-1", name: "Protea 1M (1M ctx)" },
+    { id: "refiant/protea-5", name: "Protea 5M (5M ctx)" },
+    { id: "refiant/protea-10", name: "Protea 10M (10M ctx)" },
+  ];
+
+  // 3. Fetch Ollama models
   try {
     // Generous guard (Ollama serializes requests, so /api/tags can queue behind
     // an in-progress generation). Long enough to never drop local models.
@@ -90,6 +98,10 @@ export async function GET() {
       if (!openrouterModels.some(m => m.id === modelStr)) {
         openrouterModels.unshift({ id: modelStr, name: `${rest} (Env Default)` });
       }
+    } else if (provider === "refiant") {
+      if (!refiantModels.some(m => m.id === modelStr)) {
+        refiantModels.unshift({ id: modelStr, name: `${rest} (Env Default)` });
+      }
     } else if (provider === "ollama") {
       if (!ollamaModels.some(m => m.id === modelStr)) {
         ollamaModels.unshift({ id: modelStr, name: `${rest} (Env Default)` });
@@ -103,6 +115,7 @@ export async function GET() {
 
   return NextResponse.json({
     openrouter: openrouterModels,
+    refiant: refiantModels,
     ollama: ollamaModels,
     defaults: {
       generation: ENV.MODEL_GENERATION,
