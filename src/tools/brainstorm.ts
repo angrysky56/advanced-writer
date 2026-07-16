@@ -7,27 +7,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_PATH = path.resolve(__dirname, "../../skill/SKILL.md");
 let skillMdCache: string | null = null;
-/**
- * Extract ONLY the <essential_principles> block from SKILL.md for injection
- * into a single-shot completion prompt. The rest of the file (mode_system,
- * intake, routing, automated_mcp_tools, reference/workflow/template indices)
- * is orchestration metadata written for an agent that reads files and calls
- * tools — it has no bearing on generating prose or JSON. Worse, the
- * <automated_mcp_tools> block lists this very tool alongside XML-tagged
- * example call syntax, and some models (observed with Refiant's protea-1)
- * pattern-match on that and hallucinate a fake tool-call block instead of
- * answering, instead of emitting the requested JSON. Trimming to just the
- * craft principles avoids that failure mode and cuts ~15KB of irrelevant
- * tokens from every brainstorm call.
- */
 function loadSkillMd(): string {
   if (skillMdCache !== null) return skillMdCache;
   try {
-    const full = fs.readFileSync(SKILL_PATH, "utf-8").trim();
-    const match = full.match(
-      /<essential_principles>[\s\S]*?<\/essential_principles>/,
-    );
-    skillMdCache = (match ? match[0] : full).trim();
+    skillMdCache = fs.readFileSync(SKILL_PATH, "utf-8").trim();
   } catch {
     skillMdCache = "";
     console.warn("[brainstorm] Could not load SKILL.md from", SKILL_PATH);
