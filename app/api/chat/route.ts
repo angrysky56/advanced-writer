@@ -27,6 +27,7 @@ import { executeWebSearch } from "../../../src/tools/web-search";
 import { executeBrainstorm } from "../../../src/tools/brainstorm";
 import { workspaceExporter } from "../../../src/storage/workspace";
 import { aiRouter } from "../../../src/ai/router";
+import { OPENAI_COMPAT_PROVIDERS } from "../../../src/ai/providers";
 import { startJob } from "../../../src/jobs";
 
 // ---- SKILL.md injection: load the craft persona once at startup ----
@@ -145,25 +146,24 @@ export async function POST(req: Request) {
 
   let chatModel;
   try {
-    if (provider === "openrouter") {
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OPENROUTER_API_KEY is not configured in environment.");
+    // Every OpenAI-compatible provider (OpenRouter, Refiant, Ollama's /v1
+    // layer, and anything added later) is defined ONCE in
+    // src/ai/providers.ts and handled here identically — this used to be a
+    // hand-written if/else chain duplicating the one in src/ai/router.ts,
+    // which is how Refiant ended up wired into one and not the other.
+    // Anthropic and native OpenAI stay special-cased below: they're a
+    // genuinely different SDK shape, not just a different base URL/key.
+    const compat = OPENAI_COMPAT_PROVIDERS[provider];
+    if (compat) {
+      if (compat.apiKeyEnvVar && !compat.apiKey) {
+        throw new Error(`${compat.apiKeyEnvVar} is not configured in environment.`);
       }
-      const openrouter = createOpenAI({
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: process.env.OPENROUTER_API_KEY,
-        headers: {
-          "HTTP-Referer": "http://localhost:3100",
-          "X-Title": "Advanced Writer Workspace",
-        },
+      const client = createOpenAI({
+        baseURL: compat.baseURL,
+        apiKey: compat.apiKey || "not-needed",
+        headers: compat.extraHeaders,
       });
-      chatModel = openrouter(modelId);
-    } else if (provider === "ollama") {
-      const ollama = createOpenAI({
-        baseURL: `${process.env.OLLAMA_BASE_URL || "http://localhost:11434"}/v1`,
-        apiKey: "ollama", // Dummy key
-      });
-      chatModel = ollama(modelId);
+      chatModel = client(modelId);
     } else if (provider === "anthropic") {
       chatModel = anthropic(modelId);
     } else if (provider === "openai") {

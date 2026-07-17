@@ -1,7 +1,16 @@
 import { ENV } from "../config.js";
+import { OpenAICompatProvider } from "./providers.js";
 
-export class OpenRouterClient {
-  private apiKey = ENV.OPENROUTER_API_KEY;
+/**
+ * Generic one-shot chat-completions client for any OpenAI-compatible
+ * provider (OpenRouter, Refiant, ...). This used to be two near-identical
+ * files (openrouter.ts, refiant.ts) — same retry/backoff logic, same request
+ * shape, differing only in base URL / API key / a couple of headers. Now
+ * that difference lives in the provider registry (src/ai/providers.ts) and
+ * this class does the actual HTTP work once.
+ */
+export class OpenAICompatClient {
+  constructor(private provider: OpenAICompatProvider) {}
 
   async generateCompletion(
     model: string,
@@ -9,8 +18,8 @@ export class OpenRouterClient {
     userMessage: string,
     temperature = 0.8,
   ) {
-    if (!this.apiKey) {
-      throw new Error("OPENROUTER_API_KEY is not set");
+    if (this.provider.apiKeyEnvVar && !this.provider.apiKey) {
+      throw new Error(`${this.provider.apiKeyEnvVar} is not set`);
     }
 
     const timeoutMs = ENV.AI_REQUEST_TIMEOUT_MS;
@@ -21,27 +30,25 @@ export class OpenRouterClient {
       try {
         // Hard per-attempt timeout: a model that never finishes streaming must
         // not hang the whole run. AbortSignal.timeout fires after timeoutMs.
-        const response = await fetch(
-          "https://openrouter.ai/api/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${this.apiKey}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "http://localhost:3100", // Required by OpenRouter
-              "X-Title": "Advanced Writer MCP", // Required by OpenRouter
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userMessage },
-              ],
-              temperature,
-            }),
-            signal: AbortSignal.timeout(timeoutMs),
+        const response = await fetch(`${this.provider.baseURL}/chat/completions`, {
+          method: "POST",
+          headers: {
+            ...(this.provider.apiKey
+              ? { Authorization: `Bearer ${this.provider.apiKey}` }
+              : {}),
+            "Content-Type": "application/json",
+            ...(this.provider.extraHeaders || {}),
           },
-        );
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userMessage },
+            ],
+            temperature,
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
 
         if (!response.ok) {
           let body = "";
@@ -57,7 +64,7 @@ export class OpenRouterClient {
             response.status < 500 &&
             response.status !== 429;
           const err = new Error(
-            `OpenRouter API error ${response.status} ${response.statusText}${body ? `: ${body.slice(0, 800)}` : ""}`,
+            `${this.provider.name} API error ${response.status} ${response.statusText}${body ? `: ${body.slice(0, 800)}` : ""}`,
           );
           if (permanent || attempt === maxAttempts) throw err;
           lastErr = err;
@@ -71,7 +78,7 @@ export class OpenRouterClient {
         const content = message?.content ?? message?.reasoning ?? "";
         if (!content) {
           const err = new Error(
-            `OpenRouter returned no content: ${JSON.stringify(data).slice(0, 800)}`,
+            `${this.provider.name} returned no content: ${JSON.stringify(data).slice(0, 800)}`,
           );
           if (attempt === maxAttempts) throw err;
           lastErr = err;
@@ -88,17 +95,17 @@ export class OpenRouterClient {
         lastErr = e instanceof Error ? e : new Error(reason);
         if (attempt === maxAttempts) {
           throw new Error(
-            `OpenRouter call failed after ${maxAttempts} attempt(s): ${reason}`,
+            `${this.provider.name} call failed after ${maxAttempts} attempt(s): ${reason}`,
           );
         }
         console.error(
-          `[openrouter] attempt ${attempt}/${maxAttempts} failed (${reason}); retrying...`,
+          `[${this.provider.name}] attempt ${attempt}/${maxAttempts} failed (${reason}); retrying...`,
         );
         await this.backoff(attempt);
       }
     }
     // Unreachable, but satisfies the type checker.
-    throw lastErr instanceof Error ? lastErr : new Error("OpenRouter failed");
+    throw lastErr instanceof Error ? lastErr : new Error(`${this.provider.name} failed`);
   }
 
   /** Exponential backoff with jitter between retry attempts. */
@@ -107,5 +114,3 @@ export class OpenRouterClient {
     await new Promise((r) => setTimeout(r, ms));
   }
 }
-
-export const openRouterClient = new OpenRouterClient();

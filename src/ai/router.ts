@@ -1,7 +1,7 @@
 import { ENV } from "../config.js";
 import { ollamaClient } from "./ollama.js";
-import { openRouterClient } from "./openrouter.js";
-import { refiantClient } from "./refiant.js";
+import { OpenAICompatClient } from "./openai-compat-client.js";
+import { OPENAI_COMPAT_PROVIDERS } from "./providers.js";
 import { TaskType } from "../types/workflow.js";
 
 interface CompletionRequest {
@@ -9,6 +9,19 @@ interface CompletionRequest {
   systemPrompt: string;
   userMessage: string;
   temperature?: number;
+}
+
+// One OpenAICompatClient per provider, built lazily from the shared registry
+// (src/ai/providers.ts) and cached. Adding a new OpenAI-compatible provider
+// means adding one entry to that registry — nothing here needs to change.
+const compatClients: Record<string, OpenAICompatClient> = {};
+function getCompatClient(provider: string): OpenAICompatClient {
+  if (!compatClients[provider]) {
+    compatClients[provider] = new OpenAICompatClient(
+      OPENAI_COMPAT_PROVIDERS[provider],
+    );
+  }
+  return compatClients[provider];
 }
 
 export class AIRouter {
@@ -52,21 +65,17 @@ export class AIRouter {
     const temperature = request.temperature ?? 0.8;
 
     if (provider === "ollama") {
+      // Ollama's own native /api/chat client (different request/response
+      // shape from the OpenAI-compatible providers below) — kept separate
+      // rather than folded into the registry dispatch.
       return ollamaClient.generateCompletion(
         model,
         request.systemPrompt,
         request.userMessage,
         temperature,
       );
-    } else if (provider === "openrouter") {
-      return openRouterClient.generateCompletion(
-        model,
-        request.systemPrompt,
-        request.userMessage,
-        temperature,
-      );
-    } else if (provider === "refiant") {
-      return refiantClient.generateCompletion(
+    } else if (OPENAI_COMPAT_PROVIDERS[provider]) {
+      return getCompatClient(provider).generateCompletion(
         model,
         request.systemPrompt,
         request.userMessage,
